@@ -70,7 +70,9 @@
   }
   .lbl {
     color: rgba(255,255,255,0.95); font-size: 12.5px; font-weight: 600;
-    text-shadow: 0 0 10px rgba(255,255,255,0.5), 0 1px 2px rgba(0,0,0,0.35);
+    /* The dark half carries legibility once the glass smokes down over a white
+       backdrop; the white glow only has to lift it off dark wallpaper. */
+    text-shadow: 0 0 10px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.5);
   }
   .track {
     flex: 1; height: 18px; border-radius: 999px; position: relative; overflow: hidden;
@@ -86,7 +88,7 @@
   }
   #timer {
     color: rgba(255,255,255,0.75); font-size: 11px; white-space: nowrap;
-    text-shadow: 0 0 8px rgba(255,255,255,0.4), 0 1px 2px rgba(0,0,0,0.35);
+    text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.5);
   }
   #detail {
     display: none; align-items: center; justify-content: center; gap: 16px;
@@ -323,24 +325,45 @@
           frost(uvBase + off * (1.0 - uAberration), texel, blur).b
         );
 
-        // Light bleed: bright things behind the glass bloom out into it, which
-        // is what produces the soft white flares in the reference bar.
         vec3 wide = frost(uvBase + off, texel, uBlurPx * 5.0);
-        float bright = max(dot(wide, vec3(0.299, 0.587, 0.114)) - 0.55, 0.0);
-        col += wide * bright * uBloom;
+        float wideLuma = dot(wide, vec3(0.299, 0.587, 0.114));
+
+        // Every term below this line is additive, so over a bright backdrop they
+        // stacked past 1.0 and clipped: the bar turned into a solid white glowing
+        // blob with no edge and no readable text. This fades them out as the
+        // backdrop approaches white. Taken from the wide blur, not the local
+        // colour, so dark text passing under the glass doesn't punch holes in it;
+        // zero below ~0.58 luma, so dark and mid scenes render exactly as before.
+        float hot = smoothstep(0.58, 0.92, wideLuma);
+
+        // Light bleed: bright things behind the glass bloom out into it, which
+        // is what produces the soft white flares in the reference bar. A
+        // uniformly white backdrop has nothing to flare against, only headroom
+        // to lose, so the bleed is gated off there.
+        float bright = max(wideLuma - 0.55, 0.0);
+        col += wide * bright * uBloom * (1.0 - hot);
 
         col = mix(col, vec3(1.0), uTint);
-        col *= 1.04;
+        col *= mix(1.04, 0.94, hot);
 
         // Rim light: bright inner line along the top edge, softer along the bottom.
         float rimFade = t * t;
-        col += rimFade * clamp(-nrm.y, 0.0, 1.0) * 0.30;
-        col += rimFade * clamp(nrm.y, 0.0, 1.0) * 0.13;
+        float rimGain = 1.0 - 0.8 * hot;
+        col += rimFade * clamp(-nrm.y, 0.0, 1.0) * 0.30 * rimGain;
+        col += rimFade * clamp(nrm.y, 0.0, 1.0) * 0.13 * rimGain;
+        // A white rim is invisible against white, which is what left the pill
+        // with no outline. Fade in a dark one to take over.
+        col -= rimFade * hot * 0.16;
 
         float sheen = pow(clamp(1.0 - abs(vUv.y - 0.16) * 3.0, 0.0, 1.0), 3.0) * 0.15;
-        col += sheen;
+        col += sheen * (1.0 - 0.75 * hot);
 
-        gl_FragColor = vec4(min(col, vec3(1.0)), edgeAA);
+        // Legibility scrim: the widget's text is white, so over a white backdrop
+        // the material itself has to smoke down or nothing on the bar can be
+        // read. Same idea as a system material darkening over light content.
+        col = mix(col, col * 0.58, hot);
+
+        gl_FragColor = vec4(clamp(col, 0.0, 1.0), edgeAA);
       }
     `;
 

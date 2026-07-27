@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #202024; font: 12px system-ui; color: #ccc; }
+  .row { position: relative; width: 660px; height: 92px; margin: 10px auto; }
+  .row canvas.bg { position: absolute; inset: 0; }
+  .row canvas.bar { position: absolute; left: 50px; top: 29px; width: 560px; height: 34px; }
+  .label { position: absolute; right: 6px; bottom: 2px; font-size: 10px;
+           color: #000; background: rgba(255,255,255,0.6); padding: 0 4px; }
+  /* Same DOM text the real widget draws on top of the glass. */
+  .txt { position: absolute; left: 74px; top: 38px; width: 200px;
+         color: rgba(255,255,255,0.95); font-size: 12.5px; font-weight: 600;
+         text-shadow: 0 0 10px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+<div id="rows"></div>
+<script>
+const DPR = 1.5, BAR_W = 560, BAR_H = 34;
+
+// Backdrops chosen to cover the failure the bar has over bright content and to
+// prove the dark/mid look is unchanged.
+const SCENES = {
+  'pure white': (c, w, h) => { c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); },
+  'white doc + grey UI': (c, w, h) => {
+    c.fillStyle = '#fff'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#f1f1f3'; c.fillRect(0, 0, w, 26);
+    c.fillStyle = '#333';
+    for (let i = 0; i < 5; i++) c.fillRect(40, 36 + i * 12, 300 + (i % 3) * 90, 4);
+  },
+  'pale gradient': (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#cfe0f5');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+  },
+  'mid grey': (c, w, h) => { c.fillStyle = '#7a7a80'; c.fillRect(0, 0, w, h); },
+  'dark + bright lamp': (c, w, h) => {
+    c.fillStyle = '#1b1b22'; c.fillRect(0, 0, w, h);
+    const g = c.createRadialGradient(180, 46, 2, 180, 46, 90);
+    g.addColorStop(0, '#fffbe8'); g.addColorStop(1, 'rgba(255,250,230,0)');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#3a5bd9'; c.fillRect(430, 20, 170, 52);
+  },
+};
+
+function compile(gl, type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+
+const VS = `
+  attribute vec2 aPos;
+  varying vec2 vUv;
+  void main() {
+    vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
+    gl_Position = vec4(aPos, 0.0, 1.0);
+  }
+`;
+
+function renderAll(fsSource) {
+  const rows = document.getElementById('rows');
+  rows.innerHTML = '';
+  for (const [name, paint] of Object.entries(SCENES)) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const bg = document.createElement('canvas');
+    bg.className = 'bg';
+    bg.width = 660 * DPR; bg.height = 92 * DPR;
+    bg.style.width = '660px'; bg.style.height = '92px';
+    const c2d = bg.getContext('2d');
+    c2d.scale(DPR, DPR);
+    paint(c2d, 660, 92);
+    row.appendChild(bg);
+
+    const bar = document.createElement('canvas');
+    bar.className = 'bar';
+    bar.width = Math.round(BAR_W * DPR); bar.height = Math.round(BAR_H * DPR);
+    row.appendChild(bar);
+
+    const txt = document.createElement('div');
+    txt.className = 'txt';
+    txt.textContent = '5h  37%   7d  38%';
+    row.appendChild(txt);
+
+    const lab = document.createElement('div');
+    lab.className = 'label';
+    lab.textContent = name;
+    row.appendChild(lab);
+    rows.appendChild(row);
+
+    drawBar(bar, bg, fsSource);
+  }
+  return true;
+}
+
+// Renders every scene under two shader versions and diffs the pixels, to prove
+// the fix is inert wherever the backdrop isn't bright.
+function compareShaders(oldSrc, newSrc) {
+  const report = [];
+  for (const [name, paint] of Object.entries(SCENES)) {
+    const bg = document.createElement('canvas');
+    bg.width = 660 * DPR; bg.height = 92 * DPR;
+    const c2d = bg.getContext('2d');
+    c2d.scale(DPR, DPR);
+    paint(c2d, 660, 92);
+
+    const px = [];
+    for (const src of [oldSrc, newSrc]) {
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(BAR_W * DPR); cv.height = Math.round(BAR_H * DPR);
+      const gl = drawBar(cv, bg, src);
+      const buf = new Uint8Array(cv.width * cv.height * 4);
+      gl.readPixels(0, 0, cv.width, cv.height, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      px.push(buf);
+    }
+
+    let max = 0, sum = 0, n = 0;
+    for (let i = 0; i < px[0].length; i++) {
+      const d = Math.abs(px[0][i] - px[1][i]);
+      if (d > max) max = d;
+      sum += d; n++;
+    }
+    report.push({ scene: name, maxDelta: max, meanDelta: +(sum / n).toFixed(3) });
+  }
+  return report;
+}
+
+function drawBar(canvas, bgCanvas, fsSource) {
+  const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, fsSource));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bgCanvas);
+
+  const u = (n) => gl.getUniformLocation(prog, n);
+  // Crop the backdrop exactly where the bar sits (left 50, top 29 in CSS px).
+  gl.uniform2f(u('uCropOrigin'), 50 / 660, 29 / 92);
+  gl.uniform2f(u('uCropSize'), BAR_W / 660, BAR_H / 92);
+  gl.uniform2f(u('uSizePx'), canvas.width, canvas.height);
+  gl.uniform1f(u('uRadiusPx'), 20 * DPR);
+  gl.uniform1f(u('uBevelPx'), 11.0 * DPR);
+  gl.uniform1f(u('uBulge'), 8.0 * DPR);
+  gl.uniform1f(u('uAberration'), 0.40);
+  gl.uniform1f(u('uBlurPx'), 4.0 * DPR);
+  gl.uniform1f(u('uTint'), 0.32);
+  gl.uniform1f(u('uBloom'), 1.15);
+  gl.uniform1i(u('uVideo'), 0);
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  return gl;
+}
+</script>
+</body>
+</html>

@@ -15,3 +15,5 @@ overlay-debug.log
 # Shader tuning screenshots
 glass-*.png
 verify-*.png
+tools/glasslab/out.png
+tools/glasslab/diff.txt
