@@ -205,6 +205,11 @@ function boundsPayload() {
 
 ipcMain.handle('get-bounds', () => boundsPayload());
 
+// The renderer needs the pointer to keep it out of the frosted glass, and it
+// cannot get it from DOM events: the bar is a -webkit-app-region: drag surface,
+// and Chromium delivers no mouse events over a drag region.
+ipcMain.handle('get-cursor-point', () => screen.getCursorScreenPoint());
+
 ipcMain.handle('get-screen-source', async (_e, displayId) => {
   const displays = screen.getAllDisplays();
   const disp = (displayId && displays.find((d) => String(d.id) === String(displayId)))

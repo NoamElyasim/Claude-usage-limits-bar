@@ -17,3 +17,5 @@ glass-*.png
 verify-*.png
 tools/glasslab/out.png
 tools/glasslab/diff.txt
+# Contains a real frame of the desktop, so never commit it.
+tools/cursorprobe/out.png

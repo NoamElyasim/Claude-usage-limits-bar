@@ -13,6 +13,7 @@
     "uninstall-hooks": "node scripts/install-hooks.js --uninstall",
     "make-icon": "node scripts/make-icon.js",
     "glasslab": "electron tools/glasslab/main.js",
+    "cursorprobe": "electron tools/cursorprobe",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",

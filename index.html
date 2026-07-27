@@ -429,14 +429,24 @@
     const uCursorUv = gl.getUniformLocation(prog, 'uCursorUv');
     const uCursorRadUv = gl.getUniformLocation(prog, 'uCursorRadUv');
 
-    // Pointer position, tracked on the document rather than the bar so the
-    // 40px transparent margin around it counts too — a pointer just outside
-    // the bar still bleeds ghosts inward through the blur.
+    // Pointer position, asked of the OS once a frame rather than tracked from
+    // DOM events. The bar is a -webkit-app-region: drag surface and Chromium
+    // delivers no mouse events over a drag region, so mousemove never fired for
+    // the one case that matters — the pointer sitting on the glass. Screen
+    // coordinates also cover a pointer just outside the bar, which still bleeds
+    // ghosts inward through the blur.
     const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
     const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
-    let pointer = null;
-    document.addEventListener('mousemove', (e) => { pointer = { x: e.clientX, y: e.clientY }; });
-    document.addEventListener('mouseleave', () => { pointer = null; });
+    let pointer = null;       // screen coordinates, DIP
+    let pointerPending = false;
+    function pollPointer() {
+      if (pointerPending) return;
+      pointerPending = true;
+      window.glass.cursorPoint()
+        .then((p) => { pointer = p; })
+        .catch(() => {})
+        .finally(() => { pointerPending = false; });
+    }
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -552,11 +562,14 @@
       gl.uniform1f(uTint, 0.32);
       gl.uniform1f(uBloom, 1.15);
 
+      pollPointer();
+      // A pointer nowhere near the bar costs nothing: no sample lands in the
+      // dodge disc, so the whole thing is a no-op outside the crop.
       if (pointer) {
         const sf = src.scaleFactor;
         gl.uniform2f(uCursorUv,
-          (vx + (pointer.x - r.left + CURSOR_NUDGE) * sf) / video.videoWidth,
-          (vy + (pointer.y - r.top + CURSOR_NUDGE) * sf) / video.videoHeight);
+          (pointer.x - src.displayBounds.x + CURSOR_NUDGE) * sf / video.videoWidth,
+          (pointer.y - src.displayBounds.y + CURSOR_NUDGE) * sf / video.videoHeight);
         gl.uniform2f(uCursorRadUv,
           (CURSOR_R * sf) / video.videoWidth,
           (CURSOR_R * sf) / video.videoHeight);

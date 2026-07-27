@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('usage', {
 contextBridge.exposeInMainWorld('glass', {
   getScreenSource: (displayId) => ipcRenderer.invoke('get-screen-source', displayId),
   getBounds: () => ipcRenderer.invoke('get-bounds'),
+  cursorPoint: () => ipcRenderer.invoke('get-cursor-point'),
   onBounds: (cb) => ipcRenderer.on('bounds-update', (_e, payload) => cb(payload)),
 });

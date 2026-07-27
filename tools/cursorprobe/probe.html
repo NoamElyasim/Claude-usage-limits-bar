@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #202024; font: 11px system-ui; color: #ccc; }
+  .row { margin: 6px 8px; }
+  .row div { margin-bottom: 2px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="rows"></div>
+<script>
+const VS = `
+  attribute vec2 aPos;
+  varying vec2 vUv;
+  void main() {
+    vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
+    gl_Position = vec4(aPos, 0.0, 1.0);
+  }
+`;
+
+function compile(gl, type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+
+async function grabFrame(cfg) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      mandatory: {
+        chromeMediaSource: 'desktop',
+        chromeMediaSourceId: cfg.sourceId,
+        minWidth: cfg.physW, maxWidth: cfg.physW,
+        minHeight: cfg.physH, maxHeight: cfg.physH,
+      },
+    },
+  });
+  const video = document.createElement('video');
+  video.srcObject = stream;
+  video.muted = true;
+  await video.play();
+  // Let a couple of frames land so the pointer is definitely composited in.
+  await new Promise((r) => setTimeout(r, 500));
+  const frame = document.createElement('canvas');
+  frame.width = video.videoWidth;
+  frame.height = video.videoHeight;
+  frame.getContext('2d').drawImage(video, 0, 0);
+  stream.getTracks().forEach((t) => t.stop());
+  return frame;
+}
+
+// Byte-for-byte the uniform maths in index.html's render(), with the bar rect
+// standing in for bounds + getBoundingClientRect().
+function uniforms(cfg, frame, cursorR) {
+  const sf = cfg.scaleFactor;
+  const vx = (cfg.bar.x - cfg.displayBounds.x) * sf;
+  const vy = (cfg.bar.y - cfg.displayBounds.y) * sf;
+  const vw = cfg.bar.width * sf;
+  const vh = cfg.bar.height * sf;
+  const NUDGE = 9;
+  return {
+    vx, vy, vw, vh, sf,
+    cropOrigin: [vx / frame.width, vy / frame.height],
+    cropSize: [vw / frame.width, vh / frame.height],
+    cursorUv: [
+      (cfg.cursor.x - cfg.displayBounds.x + NUDGE) * sf / frame.width,
+      (cfg.cursor.y - cfg.displayBounds.y + NUDGE) * sf / frame.height,
+    ],
+    cursorRadUv: cursorR > 0
+      ? [(cursorR * sf) / frame.width, (cursorR * sf) / frame.height]
+      : [0, 0],
+  };
+}
+
+function drawBar(canvas, frame, fsSource, u) {
+  const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, fsSource));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame);
+
+  const loc = (n) => gl.getUniformLocation(prog, n);
+  const dpr = u.sf;
+  gl.uniform1i(loc('uVideo'), 0);
+  gl.uniform2f(loc('uCropOrigin'), u.cropOrigin[0], u.cropOrigin[1]);
+  gl.uniform2f(loc('uCropSize'), u.cropSize[0], u.cropSize[1]);
+  gl.uniform2f(loc('uSizePx'), canvas.width, canvas.height);
+  gl.uniform1f(loc('uRadiusPx'), 20 * dpr);
+  gl.uniform1f(loc('uBevelPx'), 11.0 * dpr);
+  gl.uniform1f(loc('uBulge'), 8.0 * dpr);
+  gl.uniform1f(loc('uAberration'), 0.40);
+  gl.uniform1f(loc('uBlurPx'), 4.0 * dpr);
+  gl.uniform1f(loc('uTint'), 0.32);
+  gl.uniform1f(loc('uBloom'), 1.15);
+  gl.uniform2f(loc('uCursorUv'), u.cursorUv[0], u.cursorUv[1]);
+  gl.uniform2f(loc('uCursorRadUv'), u.cursorRadUv[0], u.cursorRadUv[1]);
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// The interesting part is a couple of hundred pixels around the pointer, so show
+// that slice at 2x rather than the whole 840px bar at 1x.
+function zoom(canvas, cx) {
+  const W = 200, S = 2;
+  const out = document.createElement('canvas');
+  out.width = W * S; out.height = canvas.height * S;
+  const c = out.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.drawImage(canvas, Math.round(cx - W / 2), 0, W, canvas.height, 0, 0, out.width, out.height);
+  return out;
+}
+
+function addRow(label, node) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const cap = document.createElement('div');
+  cap.textContent = label;
+  row.appendChild(cap);
+  row.appendChild(node);
+  document.getElementById('rows').appendChild(row);
+}
+
+async function run(cfg) {
+  const frame = await grabFrame(cfg);
+  const u = uniforms(cfg, frame, 22);
+
+  // Row 0: the captured pixels themselves, no shader. Shows whether the
+  // capture even contains a pointer, and how big it is.
+  const raw = document.createElement('canvas');
+  raw.width = Math.round(u.vw); raw.height = Math.round(u.vh);
+  raw.getContext('2d').drawImage(frame,
+    Math.round(u.vx), Math.round(u.vy), raw.width, raw.height,
+    0, 0, raw.width, raw.height);
+  const cx = u.cursorUv[0] * frame.width - u.vx;
+  addRow('raw capture crop (no shader)', zoom(raw, cx));
+
+  for (const [label, r] of [['dodge off', 0], ['dodge on R=22', 22], ['dodge on R=44', 44]]) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(u.vw); cv.height = Math.round(u.vh);
+    drawBar(cv, frame, cfg.fsSource, uniforms(cfg, frame, r));
+    addRow(label, zoom(cv, cx));
+  }
+
+  return {
+    frame: { w: frame.width, h: frame.height },
+    expectedPhys: { w: cfg.physW, h: cfg.physH },
+    cursor: cfg.cursor,
+    displayBounds: cfg.displayBounds,
+    scaleFactor: cfg.scaleFactor,
+    bar: cfg.bar,
+    vx: u.vx, vy: u.vy, vw: u.vw, vh: u.vh,
+    cursorUv: u.cursorUv,
+    cursorUvPx: [u.cursorUv[0] * frame.width, u.cursorUv[1] * frame.height],
+    cursorRadPx: [22 * u.sf, 22 * u.sf],
+  };
+}
+</script>
+</body>
+</html>
