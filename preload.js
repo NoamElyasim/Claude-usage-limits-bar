@@ -1,0 +1,12 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('usage', {
+  onUpdate: (cb) => ipcRenderer.on('usage-update', (_e, data) => cb(data)),
+  onStatus: (cb) => ipcRenderer.on('status-update', (_e, st) => cb(st)),
+});
+
+contextBridge.exposeInMainWorld('glass', {
+  getScreenSource: (displayId) => ipcRenderer.invoke('get-screen-source', displayId),
+  getBounds: () => ipcRenderer.invoke('get-bounds'),
+  onBounds: (cb) => ipcRenderer.on('bounds-update', (_e, payload) => cb(payload)),
+});

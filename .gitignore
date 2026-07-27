@@ -1,0 +1,17 @@
+node_modules/
+dist/
+__pycache__/
+
+# Live claude.ai session credentials — never commit these. Since 1.1 the app
+# signs in through its own window and stores cookies in the OS user-data dir,
+# so these files only exist on machines upgraded from the old setup.
+claude-cookies.txt
+claude-session.txt
+
+# Local state from the old tkinter overlay
+overlay-state.json
+overlay-debug.log
+
+# Shader tuning screenshots
+glass-*.png
+verify-*.png

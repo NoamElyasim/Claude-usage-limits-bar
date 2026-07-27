@@ -1,0 +1,92 @@
+{
+  "name": "claude-usage-overlay",
+  "productName": "Claude Usage Overlay",
+  "version": "1.1.0",
+  "description": "Always-on-top liquid-glass bar showing Claude 5h/7d usage limits and Claude Code session status",
+  "main": "main.js",
+  "license": "MIT",
+  "author": "Noam",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "install-hooks": "node scripts/install-hooks.js",
+    "uninstall-hooks": "node scripts/install-hooks.js --uninstall",
+    "make-icon": "node scripts/make-icon.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.noam.claude-usage-overlay",
+    "productName": "Claude Usage Overlay",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/**/*",
+      "hooks/**/*",
+      "scripts/install-hooks.js",
+      "!**/claude-cookies.txt",
+      "!**/claude-session.txt",
+      "!**/*.png",
+      "!overlay.py",
+      "!__pycache__"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Claude Usage Overlay"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": 1
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}
