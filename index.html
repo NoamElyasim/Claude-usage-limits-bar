@@ -260,22 +260,39 @@
       uniform float uBlurPx;
       uniform float uTint;
       uniform float uBloom;
+      uniform vec2 uCursorUv;      // pointer position in video-texture space
+      uniform vec2 uCursorRadUv;   // dodge radius per axis; 0 = pointer not over the bar
 
       float sdRoundBox(vec2 p, vec2 b, float r) {
         vec2 q = abs(p) - b + r;
         return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
       }
 
+      // The screen capture has the mouse pointer composited into it, and the
+      // 13-tap blur below resamples it once per tap — so a single dark arrow
+      // became a cluster of ghost arrows crawling around inside the glass,
+      // obvious against light grey. Samples landing on the pointer are pushed
+      // out to the rim of a small disc around it, so it never enters the
+      // material. The real pointer is drawn by the OS on top of the window and
+      // is unaffected.
+      vec2 dodgeCursor(vec2 uv) {
+        if (uCursorRadUv.x <= 0.0) return uv;
+        vec2 q = (uv - uCursorUv) / uCursorRadUv;
+        float r = length(q);
+        if (r >= 1.0) return uv;
+        return uCursorUv + (q / max(r, 1e-4)) * uCursorRadUv;
+      }
+
       // 13-tap disc blur (centre + two hex rings) — the frosted part of the glass.
       vec3 frost(vec2 uv, vec2 texel, float rad) {
-        vec3 sum = texture2D(uVideo, uv).rgb * 1.5;
+        vec3 sum = texture2D(uVideo, dodgeCursor(uv)).rgb * 1.5;
         float total = 1.5;
         for (int i = 0; i < 6; i++) {
           float a = float(i) * 1.0471975512;               // 2pi / 6
           vec2 outer = vec2(cos(a), sin(a));
           vec2 inner = vec2(cos(a + 0.5235987756), sin(a + 0.5235987756));
-          sum += texture2D(uVideo, uv + outer * rad * texel).rgb;
-          sum += texture2D(uVideo, uv + inner * rad * 0.5 * texel).rgb;
+          sum += texture2D(uVideo, dodgeCursor(uv + outer * rad * texel)).rgb;
+          sum += texture2D(uVideo, dodgeCursor(uv + inner * rad * 0.5 * texel)).rgb;
           total += 2.0;
         }
         return sum / total;
@@ -361,7 +378,7 @@
         // Legibility scrim: the widget's text is white, so over a white backdrop
         // the material itself has to smoke down or nothing on the bar can be
         // read. Same idea as a system material darkening over light content.
-        col = mix(col, col * 0.58, hot);
+        col = mix(col, col * 0.70, hot);
 
         gl_FragColor = vec4(clamp(col, 0.0, 1.0), edgeAA);
       }
@@ -409,6 +426,17 @@
     const uBevelPx = gl.getUniformLocation(prog, 'uBevelPx');
     const uTint = gl.getUniformLocation(prog, 'uTint');
     const uBloom = gl.getUniformLocation(prog, 'uBloom');
+    const uCursorUv = gl.getUniformLocation(prog, 'uCursorUv');
+    const uCursorRadUv = gl.getUniformLocation(prog, 'uCursorRadUv');
+
+    // Pointer position, tracked on the document rather than the bar so the
+    // 40px transparent margin around it counts too — a pointer just outside
+    // the bar still bleeds ghosts inward through the blur.
+    const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
+    const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
+    let pointer = null;
+    document.addEventListener('mousemove', (e) => { pointer = { x: e.clientX, y: e.clientY }; });
+    document.addEventListener('mouseleave', () => { pointer = null; });
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -523,6 +551,18 @@
       gl.uniform1f(uBlurPx, 4.0 * dpr);
       gl.uniform1f(uTint, 0.32);
       gl.uniform1f(uBloom, 1.15);
+
+      if (pointer) {
+        const sf = src.scaleFactor;
+        gl.uniform2f(uCursorUv,
+          (vx + (pointer.x - r.left + CURSOR_NUDGE) * sf) / video.videoWidth,
+          (vy + (pointer.y - r.top + CURSOR_NUDGE) * sf) / video.videoHeight);
+        gl.uniform2f(uCursorRadUv,
+          (CURSOR_R * sf) / video.videoWidth,
+          (CURSOR_R * sf) / video.videoHeight);
+      } else {
+        gl.uniform2f(uCursorRadUv, 0.0, 0.0);
+      }
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);

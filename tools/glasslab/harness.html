@@ -35,6 +35,10 @@ const SCENES = {
     c.fillStyle = g; c.fillRect(0, 0, w, h);
   },
   'mid grey': (c, w, h) => { c.fillStyle = '#7a7a80'; c.fillRect(0, 0, w, h); },
+  // The screen capture bakes in the mouse pointer, so the blur can smear it into
+  // ghost copies. These two rows are identical apart from the dodge uniform.
+  'grey + cursor (dodge off)': (c, w, h) => { paintCursorScene(c, w, h); },
+  'grey + cursor (dodge on)': (c, w, h) => { paintCursorScene(c, w, h); },
   'dark + bright lamp': (c, w, h) => {
     c.fillStyle = '#1b1b22'; c.fillRect(0, 0, w, h);
     const g = c.createRadialGradient(180, 46, 2, 180, 46, 90);
@@ -43,6 +47,30 @@ const SCENES = {
     c.fillStyle = '#3a5bd9'; c.fillRect(430, 20, 170, 52);
   },
 };
+
+// Pointer hotspot inside the bar, in row CSS px, for the two cursor scenes.
+const CURSOR_AT = { x: 300, y: 40 };
+const CURSOR_SCENES = {
+  'grey + cursor (dodge off)': false,
+  'grey + cursor (dodge on)': true,
+};
+
+function paintCursorScene(c, w, h) {
+  c.fillStyle = '#c9c9cd';
+  c.fillRect(0, 0, w, h);
+  c.save();
+  c.translate(CURSOR_AT.x, CURSOR_AT.y);
+  c.scale(1.5, 1.5);
+  c.beginPath();
+  c.moveTo(0, 0); c.lineTo(0, 17); c.lineTo(4, 13); c.lineTo(7, 20);
+  c.lineTo(10, 19); c.lineTo(7, 12); c.lineTo(12, 12); c.closePath();
+  c.fillStyle = '#000';
+  c.fill();
+  c.strokeStyle = '#fff';
+  c.lineWidth = 1;
+  c.stroke();
+  c.restore();
+}
 
 function compile(gl, type, src) {
   const sh = gl.createShader(type);
@@ -93,7 +121,7 @@ function renderAll(fsSource) {
     row.appendChild(lab);
     rows.appendChild(row);
 
-    drawBar(bar, bg, fsSource);
+    drawBar(bar, bg, fsSource, CURSOR_SCENES[name] === true);
   }
   return true;
 }
@@ -130,7 +158,7 @@ function compareShaders(oldSrc, newSrc) {
   return report;
 }
 
-function drawBar(canvas, bgCanvas, fsSource) {
+function drawBar(canvas, bgCanvas, fsSource, dodgeCursor) {
   const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
@@ -167,6 +195,14 @@ function drawBar(canvas, bgCanvas, fsSource) {
   gl.uniform1f(u('uTint'), 0.32);
   gl.uniform1f(u('uBloom'), 1.15);
   gl.uniform1i(u('uVideo'), 0);
+
+  // Matches the CURSOR_R / CURSOR_NUDGE constants in index.html.
+  if (dodgeCursor) {
+    gl.uniform2f(u('uCursorUv'), (CURSOR_AT.x + 9) / 660, (CURSOR_AT.y + 9) / 92);
+    gl.uniform2f(u('uCursorRadUv'), 22 / 660, 22 / 92);
+  } else {
+    gl.uniform2f(u('uCursorRadUv'), 0, 0);
+  }
 
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(0, 0, 0, 0);

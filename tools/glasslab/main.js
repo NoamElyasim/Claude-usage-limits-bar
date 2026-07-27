@@ -30,7 +30,7 @@ function extract(html) {
 
 app.whenReady().then(async () => {
   const current = extract(fs.readFileSync(INDEX, 'utf8'));
-  const win = new BrowserWindow({ width: 700, height: 620, show: false });
+  const win = new BrowserWindow({ width: 700, height: 840, show: false });
   await win.loadFile(path.join(HERE, 'harness.html'));
 
   if (MODE === 'diff') {
