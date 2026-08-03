@@ -6,7 +6,6 @@
   "main": "main.js",
   "license": "MIT",
   "author": "Noam",
-  "private": true,
   "scripts": {
     "start": "electron .",
     "install-hooks": "node scripts/install-hooks.js",
