@@ -54,7 +54,10 @@
     pointer-events: none;
     z-index: 2;
   }
-  #widget:hover {
+  /* .hovered is set by the hit-test in script — :hover never matches over a
+     -webkit-app-region: drag surface. Both selectors are kept so the same
+     markup still behaves in a plain browser. */
+  #widget:hover, #widget.hovered {
     /* Deepened, but the offsets stay put: hover lifts the bar 2px, so growing
        them would push the shadow back into the window's top clip edge. */
     box-shadow: 0 2px 4px rgba(0,0,0,0.12),
@@ -96,7 +99,7 @@
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     position: relative; z-index: 1;
   }
-  #widget:hover #detail { display: flex; }
+  #widget:hover #detail, #widget.hovered #detail { display: flex; }
   #detail b { font-weight: 700; color: #ffffff; }
   #detail .sep { width: 1px; height: 12px; background: rgba(255,255,255,0.35); }
 </style>
@@ -212,6 +215,49 @@
   }
   setInterval(drawDot, 1000);
   window.usage.onStatus((st) => { status = st || 'none'; drawDot(); });
+
+  // ─── Pointer: polled from the OS, never from DOM events ─────────────────────
+  // #widget is a -webkit-app-region: drag surface and Chromium delivers no mouse
+  // events over a drag region, so mousemove never fires and :hover never matches
+  // while the pointer is on the bar. Everything that needs the pointer asks the
+  // main process for it instead.
+  let pointer = null;        // screen coordinates, DIP
+  let pointerPending = false;
+  function pollPointer() {
+    if (pointerPending) return;
+    pointerPending = true;
+    window.glass.cursorPoint()
+      .then((p) => { pointer = p; })
+      .catch(() => {})
+      .finally(() => { pointerPending = false; });
+  }
+
+  // Window position, tracked out here rather than inside initGlass so hover
+  // still works in the no-glass fallback, where initGlass bails before it ever
+  // subscribes.
+  let windowBounds = null;
+  window.glass.onBounds((p) => { if (p) windowBounds = p.bounds; });
+  window.glass.getBounds().then((p) => { if (p) windowBounds = p.bounds; }).catch(() => {});
+
+  // ─── Hover: hit-tested, since :hover cannot fire over the drag region ───────
+  const hoverEl = document.getElementById('widget');
+  const HOVER_PAD = 4;   // CSS px of slack so the pointer on the edge doesn't chatter
+  function hoverTick() {
+    requestAnimationFrame(hoverTick);
+    pollPointer();
+    if (!pointer || !windowBounds) return;
+    // Measured every frame: the bar grows when #detail unfolds, and the
+    // expanded rect contains the collapsed one, so this settles instead of
+    // oscillating.
+    const r = hoverEl.getBoundingClientRect();
+    const inside =
+      pointer.x >= windowBounds.x + r.left - HOVER_PAD &&
+      pointer.x <= windowBounds.x + r.right + HOVER_PAD &&
+      pointer.y >= windowBounds.y + r.top - HOVER_PAD &&
+      pointer.y <= windowBounds.y + r.bottom + HOVER_PAD;
+    hoverEl.classList.toggle('hovered', inside);
+  }
+  requestAnimationFrame(hoverTick);
 
   // ─── Live glass: captures the desktop behind the window and refracts it ──────
   // (real bulge/chromatic-aberration lens effect, not a CSS approximation —
@@ -429,24 +475,10 @@
     const uCursorUv = gl.getUniformLocation(prog, 'uCursorUv');
     const uCursorRadUv = gl.getUniformLocation(prog, 'uCursorRadUv');
 
-    // Pointer position, asked of the OS once a frame rather than tracked from
-    // DOM events. The bar is a -webkit-app-region: drag surface and Chromium
-    // delivers no mouse events over a drag region, so mousemove never fired for
-    // the one case that matters — the pointer sitting on the glass. Screen
-    // coordinates also cover a pointer just outside the bar, which still bleeds
-    // ghosts inward through the blur.
+    // Screen coordinates cover a pointer just outside the bar too, which still
+    // bleeds ghost cursors inward through the blur.
     const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
     const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
-    let pointer = null;       // screen coordinates, DIP
-    let pointerPending = false;
-    function pollPointer() {
-      if (pointerPending) return;
-      pointerPending = true;
-      window.glass.cursorPoint()
-        .then((p) => { pointer = p; })
-        .catch(() => {})
-        .finally(() => { pointerPending = false; });
-    }
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -536,6 +568,11 @@
       // bar, so measuring the window here stretched a 640x130 slice of desktop
       // over a 560x34 canvas and the refraction no longer lined up with what was
       // actually behind the glass.
+      // The bar changes height when #detail unfolds on hover, so the backing
+      // store has to follow it — otherwise a 34px-tall texture gets stretched
+      // over the taller bar and the corner radius and bevel go with it.
+      sizeCanvas(src.scaleFactor);
+
       const r = widgetEl.getBoundingClientRect();
       const vx = (bounds.x + r.left - src.displayBounds.x) * src.scaleFactor;
       const vy = (bounds.y + r.top - src.displayBounds.y) * src.scaleFactor;
@@ -562,7 +599,6 @@
       gl.uniform1f(uTint, 0.32);
       gl.uniform1f(uBloom, 1.15);
 
-      pollPointer();
       // A pointer nowhere near the bar costs nothing: no sample lands in the
       // dodge disc, so the whole thing is a no-op outside the crop.
       if (pointer) {

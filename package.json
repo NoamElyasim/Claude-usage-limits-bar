@@ -13,6 +13,7 @@
     "make-icon": "node scripts/make-icon.js",
     "glasslab": "electron tools/glasslab/main.js",
     "cursorprobe": "electron tools/cursorprobe",
+    "hovertest": "electron tools/hovertest",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
