@@ -45,7 +45,72 @@ Windows · macOS · Linux · MIT
 
 ## Install
 
-Grab a build from [Releases](../../releases), or run it from source:
+**[Download for your system →](../../releases/latest)** then follow the one line
+for it. No Node, no clone, no build.
+
+<details open>
+<summary><b>Windows</b></summary>
+
+Download `…Setup….exe` and run it.
+
+The build is unsigned, so SmartScreen shows a blue box on first launch:
+**More info → Run anyway**. Prefer nothing installed? Take the
+`Claude Usage Limits Bar ….exe` without *Setup* in the name — it is portable
+and runs as-is.
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+Download the `.dmg`, open it, drag the app to Applications.
+
+The build is unsigned, so the first launch needs **right-click → Open** rather
+than a double-click. If macOS refuses outright:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"
+```
+
+macOS then asks for **Screen Recording** permission — the glass effect reads the
+desktop behind the bar. Without it you get a plain dark pill and everything else
+still works.
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+Download the `.AppImage`, then:
+
+```bash
+chmod +x 'Claude Usage Limits Bar-'*.AppImage
+./'Claude Usage Limits Bar-'*.AppImage
+```
+
+No install step — an AppImage is the application. Live capture needs a
+compositor that allows `desktopCapturer`: fine on X11, portal-dependent on
+Wayland.
+</details>
+
+Then **sign in** in the window that opens, using an **email code** — Google
+sign-in refuses an embedded browser. Once per machine; the session lives in the
+OS user-data dir. That's the whole setup.
+
+### Optional: the status dot
+
+The usage bars work on their own. The dot only lights up once Claude Code can
+tell the bar what it is doing, which takes a hook:
+
+```bash
+git clone https://github.com/NoamElyasim/Claude-usage-limits-bar
+cd Claude-usage-limits-bar
+node scripts/install-hooks.js
+```
+
+Run it **where Claude Code itself runs** — a normal shell on macOS and Linux, or
+*inside WSL* on Windows if that is where you use Claude Code. No `npm install`
+needed. Undo with `--uninstall`.
+
+### Running from source
 
 ```bash
 git clone https://github.com/NoamElyasim/Claude-usage-limits-bar
@@ -54,30 +119,8 @@ npm install
 npm start
 ```
 
-On first launch a claude.ai sign-in window opens. Use an **email code** —
-Google sign-in refuses an embedded browser. The session is stored in the OS
-user-data dir and survives restarts, so this is once per machine.
-
-To build an installer instead:
-
-```bash
-npm run dist:win     # → dist/*.exe
-npm run dist:mac     # → dist/*.dmg
-npm run dist:linux   # → dist/*.AppImage
-```
-
-Each target has to be built on its own OS. See [INSTALL.md](INSTALL.md) for
-per-OS notes, where your data lives, and troubleshooting.
-
-**Want the status dot?** That needs a hook installed into Claude Code itself:
-
-```bash
-node scripts/install-hooks.js
-```
-
-Run it in the environment Claude Code runs in — a normal shell on macOS and
-Linux, or inside WSL on Windows if that is where you run Claude Code. Undo with
-`--uninstall`.
+Needs Node 18+. See [INSTALL.md](INSTALL.md) for building installers, where your
+data lives, and troubleshooting.
 
 ## Using it
 

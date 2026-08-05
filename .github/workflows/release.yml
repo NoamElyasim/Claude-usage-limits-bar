@@ -1,0 +1,62 @@
+name: Build release artifacts
+
+# Each target has to be built on its own OS — electron-builder cannot
+# cross-compile a signed .exe or a .dmg — which is why the published builds
+# were Windows-only. Runners give us the other two.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach to (e.g. v1.2.0)'
+        required: true
+
+permissions:
+  contents: write        # needed to upload assets onto the release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false    # one platform failing should not bin the others
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            artifacts: 'dist/*.exe'
+          - os: macos-latest
+            script: dist:mac
+            artifacts: 'dist/*.dmg'
+          - os: ubuntu-latest
+            script: dist:linux
+            artifacts: 'dist/*.AppImage'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run ${{ matrix.script }}
+        env:
+          # Nothing is signed: there is no Apple certificate and no Windows
+          # cert. Left explicit so electron-builder does not go looking for one
+          # and fail the job on a runner that has none.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Attach to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          # --clobber so a re-run replaces its own artifacts instead of failing
+          # on a name that already exists.
+          gh release upload "$TAG" ${{ matrix.artifacts }} --clobber --repo "$GITHUB_REPOSITORY"

@@ -13,28 +13,42 @@ Do part 1 for the usage bars. Add part 2 if you want the dot to work.
 
 ## 1. The overlay app
 
-Pick one. Most people want Option A.
+Download the file for your system from
+[the latest release](../../releases/latest), then follow that one section.
+Nothing to install first — no Node, no clone.
 
-| You want to | Use | Needs |
+| System | File | What to do |
 | --- | --- | --- |
-| Just run the bar | **A — download a build** | nothing |
-| Work on the code | **B — run from source** | Node 18+ |
-| Produce installers | **C — build them** | Node 18+, and the target OS |
+| Windows | `Claude Usage Limits Bar Setup <version>.exe` | Run it |
+| Windows, no install | `Claude Usage Limits Bar <version>.exe` | Run it — portable |
+| macOS | `Claude Usage Limits Bar-<version>.dmg` | Open, drag to Applications |
+| Linux | `Claude Usage Limits Bar-<version>.AppImage` | `chmod +x`, then run |
 
-### Option A — download a build
+Nothing here is code-signed — there is no Apple certificate and no Windows
+one — so each OS objects once, in its own way. That is the only awkward part of
+the install, and it is a one-time click.
 
-Grab the latest from [Releases](../../releases/latest):
+**Windows.** SmartScreen shows a blue box: **More info → Run anyway**.
 
-| File | For |
-| --- | --- |
-| `Claude Usage Limits Bar Setup <version>.exe` | Windows, installed |
-| `Claude Usage Limits Bar <version>.exe` | Windows, portable — no install |
+**macOS.** First launch must be **right-click → Open**, not a double-click. If
+Gatekeeper refuses outright:
 
-Windows builds are unsigned, so SmartScreen warns on first launch:
-**More info → Run anyway**. macOS and Linux builds are not published; produce
-them with Option C on those machines.
+```bash
+xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"
+```
 
-### Option B — run from source (any OS)
+**Linux.** An AppImage is the application; there is no install step.
+
+```bash
+chmod +x 'Claude Usage Limits Bar-'*.AppImage
+./'Claude Usage Limits Bar-'*.AppImage
+```
+
+Then sign in with an **email code** — Google sign-in may refuse an embedded
+browser. The session is stored in the OS user-data dir and survives restarts,
+so this is once per machine.
+
+### Running from source instead
 
 Needs Node 18+.
 
@@ -48,23 +62,18 @@ npm start
 A clone is *source*, not a runnable app: `node_modules` and `dist` are
 deliberately not in the repository, so `npm install` is not optional.
 
-On first launch a claude.ai login window opens. Sign in with an **email code** —
-Google sign-in may refuse an embedded browser. The session is stored in the OS
-user-data dir and survives restarts, so this is once per machine.
-
-### Option C — build an installer
+### Building installers
 
 ```bash
-npm run dist:win     # → dist/*.exe   (must be run on Windows)
-npm run dist:mac     # → dist/*.dmg   (must be run on macOS)
+npm run dist:win     # → dist/*.exe        (must be run on Windows)
+npm run dist:mac     # → dist/*.dmg        (must be run on macOS)
 npm run dist:linux   # → dist/*.AppImage
 ```
 
-Each target has to be built on its own OS: the mac build needs `codesign` and
-the Windows build needs to stamp the .exe, neither of which cross-compiles here.
-
-The macOS build is unsigned, so the first launch needs
-**right-click → Open** (or `xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"`).
+Each target has to be built on its own OS, which is why
+`.github/workflows/release.yml` builds all three on GitHub's runners and
+attaches them to the release whenever a `v*` tag is pushed. To fill in a tag
+that already exists, run that workflow manually and give it the tag.
 
 ### Per-OS notes
 
