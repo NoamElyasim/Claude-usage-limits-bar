@@ -39,8 +39,8 @@ them with Option C on those machines.
 Needs Node 18+.
 
 ```bash
-git clone https://github.com/NoamElyasim/claude-usage-overlay
-cd claude-usage-overlay
+git clone https://github.com/NoamElyasim/Claude-usage-limits-bar
+cd Claude-usage-limits-bar
 npm install
 npm start
 ```
@@ -70,9 +70,9 @@ The macOS build is unsigned, so the first launch needs
 
 **macOS.** The refraction effect needs Screen Recording permission. macOS asks
 on first launch; if you miss the prompt, the bar falls back to a plain dark pill
-and right-click gains an *Allow screen recording…* item. Grant it in
+and the ⋮ menu gains an *Allow screen recording…* item. Grant it in
 System Settings → Privacy & Security → Screen Recording, then restart the app.
-The app has no Dock icon by design — right-click the bar itself for the menu.
+The app has no Dock icon by design — use the ⋮ button on the bar for the menu.
 
 **Windows.** The overlay is a desktop app: install and run it **natively on
 Windows**, never inside WSL — there is no desktop in there for it to draw on.
@@ -137,8 +137,8 @@ macOS/Linux, or *inside WSL* on Windows. It needs a clone, so this is the one
 part that wants the source even if you installed the app from a release:
 
 ```bash
-git clone https://github.com/NoamElyasim/claude-usage-overlay
-cd claude-usage-overlay
+git clone https://github.com/NoamElyasim/Claude-usage-limits-bar
+cd Claude-usage-limits-bar
 node scripts/install-hooks.js
 ```
 
@@ -180,8 +180,8 @@ independent of the overlay — if you don't want it, delete the block after the
 
 | Symptom | Cause |
 | --- | --- |
-| Bar shows `⚠ sign in` | No claude.ai session — right-click → *Sign in to Claude…* |
+| Bar shows `⚠ sign in` | No claude.ai session — ⋮ menu → *Sign in to Claude…* |
 | Bars show `—` | Usage request failed: expired session or no network. It retries every 30s |
 | Bar is a plain dark pill | Live capture unavailable — screen-recording permission, or no WebGL |
 | Dot stuck grey | Hooks not installed, or the status dir isn't being found (above) |
-| Bar off-screen after unplugging a monitor | It clamps to a visible display on launch; or right-click → *Reset position* |
+| Bar off-screen after unplugging a monitor | It clamps to a visible display on launch; or ⋮ menu → *Reset position* |

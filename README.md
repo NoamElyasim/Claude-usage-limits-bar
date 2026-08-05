@@ -11,7 +11,7 @@ Windows · macOS · Linux · MIT
 
 <img src="docs/overlay.gif" alt="The overlay bar refracting a moving backdrop, then lifting on hover to reveal both reset times" width="760">
 
-**[Try the live bar →](https://noamelyasim.github.io/claude-usage-overlay/)** — the real shader, running in your browser
+**[Try the live bar →](https://noamelyasim.github.io/Claude-usage-limits-bar/)** — the real shader, running in your browser
 
 [Download](../../releases/latest) · [Install](#install) · [Using it](#using-it) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
 
@@ -48,8 +48,8 @@ Windows · macOS · Linux · MIT
 Grab a build from [Releases](../../releases), or run it from source:
 
 ```bash
-git clone https://github.com/NoamElyasim/claude-usage-overlay
-cd claude-usage-overlay
+git clone https://github.com/NoamElyasim/Claude-usage-limits-bar
+cd Claude-usage-limits-bar
 npm install
 npm start
 ```
