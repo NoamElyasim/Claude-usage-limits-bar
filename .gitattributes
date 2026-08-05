@@ -1,0 +1,16 @@
+# Line endings are normalised to LF in the repository, and each clone checks
+# out whatever its core.autocrlf says. Without this a Windows clone and a WSL
+# clone disagree about every line of every file, and the first commit from
+# either one shows the whole tree as modified.
+* text=auto
+
+# Shell scripts must stay LF everywhere, including on Windows: a CRLF line
+# ending after the shebang makes the interpreter path unresolvable.
+*.sh text eol=lf
+
+# Binary, so never diffed and never line-ending converted.
+*.png  binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.exe  binary
