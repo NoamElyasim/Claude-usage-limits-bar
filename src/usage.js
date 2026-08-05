@@ -45,13 +45,21 @@ async function resolveOrgId() {
 }
 
 function parseLimits(data) {
-  let session = null, weekly = null;
-  for (const lim of (data.limits || [])) {
-    if (lim.percent == null) continue;
-    const group = lim.group || '', kind = lim.kind || '';
-    if (group === 'session' || kind === 'session') session = Math.round(lim.percent);
-    else if (group === 'weekly' || kind.includes('weekly')) weekly = Math.round(lim.percent);
-  }
+  const limits = Array.isArray(data.limits) ? data.limits : [];
+  const scored = limits.filter((l) => l && l.percent != null);
+  const pct = (l) => (l ? Math.round(l.percent) : null);
+
+  let session = pct(scored.find((l) => l.group === 'session' || l.kind === 'session'));
+
+  // The API returns more than one entry in the weekly group: `weekly_all` is
+  // the account-wide number the web app shows, alongside a narrower
+  // `weekly_scoped` that reads 0 with a null resets_at on this account.
+  // Assigning every match in a loop meant last-wins, so weekly_scoped's 0
+  // clobbered weekly_all's real figure and the bar showed 0% against 11% in
+  // the app. Pick the account-wide one explicitly.
+  const weeklies = scored.filter((l) => l.group === 'weekly' || (l.kind || '').includes('weekly'));
+  let weekly = pct(weeklies.find((l) => l.kind === 'weekly_all') || weeklies[0]);
+
   if (session == null && typeof data.five_hour?.utilization === 'number')
     session = Math.round(data.five_hour.utilization);
   if (weekly == null && typeof data.seven_day?.utilization === 'number')
