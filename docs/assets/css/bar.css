@@ -1,0 +1,122 @@
+/* Lifted from the overlay app's index.html. Electron-only rules removed:
+   the window sizing on html/body, and -webkit-app-region: drag. */
+#bar {
+  position: absolute; left: 40px; top: 120px; width: 560px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  cursor: grab;
+  touch-action: none;
+  display: flex; flex-direction: column; gap: 6px;
+  overflow: hidden;
+  z-index: 1;
+  background: rgba(255,255,255,0.14); /* fallback fill if the shader isn't running */
+  /* Only the cast shadow and a hairline edge live in CSS — the rim light and
+     inner glow are drawn by the shader, so duplicating them here washed the
+     glass out. */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.10),
+              0 6px 12px rgba(0,0,0,0.10),
+              0 14px 24px rgba(0,0,0,0.13),
+              inset 0 0 0 1px rgba(255,255,255,0.45);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  font-family: -apple-system, 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  user-select: none;
+}
+#bar.dragging { cursor: grabbing; transition: box-shadow 0.25s ease; }
+/* #bar sets its own `display: flex` above (ID selector, specificity 1,0,0),
+   which otherwise beats the browser's default `[hidden] { display: none; }`
+   UA rule (attribute selector, 0,1,0) — so hero.js's `bar.hidden = true`
+   would leave the 560px-wide bar occupying layout and causing horizontal
+   scroll at narrow widths. This rule (specificity 1,1,0) restores hiding. */
+#bar[hidden] { display: none; }
+#glass-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 0; display: block; pointer-events: none;
+}
+/* Shader unavailable — no WebGL. The 14% white fill alone would leave the
+   text unreadable over a light backdrop; fall back to a plain dark pill,
+   exactly as the app does. */
+#bar.no-glass { background: rgba(26,26,30,0.60); }
+#bar::after { /* soft white edge */
+  content: ''; position: absolute; inset: 0; border-radius: 20px; padding: 1px;
+  background: linear-gradient(to bottom,
+    rgba(255,255,255,0.85), rgba(255,255,255,0.35) 45%, rgba(255,255,255,0.55));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+#bar:hover {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12),
+              0 6px 12px rgba(0,0,0,0.12),
+              0 14px 24px rgba(0,0,0,0.17),
+              inset 0 0 0 1px rgba(255,255,255,0.55);
+  transform: translateY(-2px);
+}
+#row { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+#dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: #555555; transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.lbl {
+  color: rgba(255,255,255,0.95); font-size: 12.5px; font-weight: 600;
+  text-shadow: 0 0 10px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.5);
+}
+.track {
+  flex: 1; height: 18px; border-radius: 999px; position: relative; overflow: hidden;
+  background: rgba(255,255,255,0.42);
+  box-shadow: inset 0 0 10px rgba(255,255,255,0.35);
+}
+.fill {
+  position: absolute; inset: 0 auto 0 0; width: 0%; min-width: 44px;
+  border-radius: 999px; background: #34b96c;
+  display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;
+  color: #ffffff; font-size: 11px; font-weight: 700;
+  transition: width 0.4s ease, background-color 0.3s ease;
+}
+#timer {
+  color: rgba(255,255,255,0.75); font-size: 11px; white-space: nowrap;
+  text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.5);
+}
+/* In the app this also carries -webkit-app-region: no-drag, which is the whole
+   point of it: the bar is a drag surface, and Chromium delivers no mouse events
+   over one, so the menu could not be reached by right-clicking. */
+#menu-btn {
+  flex: none; width: 18px; height: 20px; border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; cursor: pointer; position: relative; z-index: 3;
+  opacity: 0.6; transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+#menu-btn:hover { opacity: 1; background: rgba(255,255,255,0.22); }
+#menu-btn i {
+  width: 3px; height: 3px; border-radius: 50%; flex: none;
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+#detail {
+  display: none; align-items: center; justify-content: center; gap: 16px;
+  padding: 2px 0 4px; color: rgba(255,255,255,0.8); font-size: 11px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  position: relative; z-index: 1;
+}
+#bar:hover #detail { display: flex; }
+#detail b { font-weight: 700; color: #ffffff; }
+#detail .sep { width: 1px; height: 12px; background: rgba(255,255,255,0.35); }
+
+/* Static fallback: no WebGL/lost context, or viewport under 700px. Same
+   position/size as #bar so swapping it in produces no layout shift. */
+#bar-fallback {
+  position: absolute; left: 40px; top: 120px; width: 560px;
+  max-width: calc(100% - 48px);
+  height: auto; z-index: 1;
+  border-radius: 20px;
+}
+#bar-fallback[hidden] { display: none; }
+@media (max-width: 700px) {
+  #bar-fallback { left: 24px; top: 80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bar, #bar.dragging, .fill, #dot { transition: none; }
+}

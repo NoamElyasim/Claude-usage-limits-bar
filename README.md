@@ -9,9 +9,11 @@ and what Claude Code is doing right now.
 
 Windows · macOS · Linux · MIT
 
-<img src="docs/overlay.png" alt="The overlay bar, hovered, showing 5h and 7d usage and the reset times" width="820">
+<img src="docs/overlay.gif" alt="The overlay bar refracting a moving backdrop, then lifting on hover to reveal both reset times" width="760">
 
-[Install](#install) · [Using it](#using-it) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
+**[Try the live bar →](https://noamelyasim.github.io/claude-usage-overlay/)** — the real shader, running in your browser
+
+[Download](../../releases/latest) · [Install](#install) · [Using it](#using-it) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
 
 </div>
 

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Usage Overlay — Noam Elyasim</title>
+<meta name="description" content="An always-on-top glass bar showing Claude usage limits and what Claude Code is doing, with real WebGL refraction.">
+<meta property="og:title" content="Claude Usage Overlay">
+<meta property="og:description" content="An always-on-top glass bar showing your Claude usage limits and what Claude Code is currently doing.">
+<meta property="og:image" content="https://noamelyasim.github.io/claude-usage-overlay/overlay.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/bar.css">
+</head>
+<body>
+
+<section id="hero">
+  <img id="backdrop" src="assets/img/backdrop.webp" alt="">
+  <div id="hero-copy">
+    <h1>Claude Usage Overlay</h1>
+    <p class="tagline">An always-on-top glass bar showing your Claude usage limits and what Claude Code is currently doing.</p>
+    <a class="btn" id="repo-link" href="https://github.com/NoamElyasim/claude-usage-overlay">View source on GitHub</a>
+    <a class="btn" id="download-link" href="https://github.com/NoamElyasim/claude-usage-overlay/releases/latest">Download</a>
+  </div>
+  <div id="bar" aria-hidden="true">
+    <canvas id="glass-canvas" aria-hidden="true"></canvas>
+    <div id="row">
+      <span id="dot"></span>
+      <span class="lbl">5h</span>
+      <span class="track"><span class="fill" id="fill-5h">—</span></span>
+      <span class="lbl">7d</span>
+      <span class="track"><span class="fill" id="fill-7d">—</span></span>
+      <span id="timer">⏱ —</span>
+      <span id="menu-btn" title="Menu"><i></i><i></i><i></i></span>
+    </div>
+    <div id="detail">
+      <span>5h window resets at <b id="reset-5h">—</b></span>
+      <span class="sep"></span>
+      <span>7d window resets <b id="reset-7d">—</b></span>
+    </div>
+  </div>
+  <img id="bar-fallback" src="assets/img/bar-fallback.png" alt="The Claude Usage Overlay bar, showing 5h and 7d usage meters and a status dot." hidden>
+  <p id="demo-note">Figures above are illustrative. The real bar reads the claude.ai usage API every 30 seconds.</p>
+</section>
+
+<section id="what">
+  <h2>What it is</h2>
+
+  <div class="feature">
+    <h3>Usage limits</h3>
+    <p>5-hour and 7-day windows read straight from the claude.ai usage API, polled every 30 seconds. Green below 50%, yellow to 80%, orange to 90%, red above.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Claude Code status</h3>
+    <p>A dot showing what Claude Code is doing right now: blue while a session is working, blinking yellow when it needs input, green when a turn finishes, grey when nothing is running. Across every live session at once — the most urgent state wins.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Real refraction</h3>
+    <p>The bar captures the desktop behind it and runs it through a WebGL shader: a bevelled rim, chromatic aberration, a frosted interior, and bloom. The bar at the top of this page is that same shader, running on a still image instead of a live capture.</p>
+  </div>
+</section>
+
+<section id="deep">
+  <h2>The interesting part</h2>
+
+  <div class="problem">
+    <h3>You cannot blur the desktop with CSS</h3>
+    <p><code>backdrop-filter</code> only samples the page it is on. In a transparent Electron window there is nothing behind the element to sample, so the frosted-glass look that works on a normal web page produces <strong>nothing at all</strong> here.</p>
+    <p>So the bar captures the screen itself, through <code>desktopCapturer</code>, and refracts that feed in WebGL. The window excludes itself from the capture — otherwise it samples its own output and the glass fills with an infinite tunnel of itself.</p>
+  </div>
+
+  <div class="problem">
+    <h3>A finished task kept turning yellow</h3>
+    <p>The status dot is driven by a Claude Code hook. But <code>Notification</code> fires for two different things: a real permission prompt, and the idle "Claude is waiting for your input" nudge. Treating them the same meant <strong>every completed task eventually flipped from green to yellow</strong> while sitting idle.</p>
+    <p>The nudge is now suppressed when nothing is executing — if <code>Stop</code> has already run, there is no work to interrupt, so the notification cannot mean what it appears to mean.</p>
+  </div>
+
+  <div class="problem">
+    <h3>Background sessions are invisible to the process table</h3>
+    <p>Checking whether a session is still alive by looking for its id with <code>pgrep -af</code> works for interactive sessions and fails silently for background jobs: the session id <strong>exists only inside the hook payload</strong> and never appears in the process command line. Those sessions read as dead the moment they start.</p>
+    <p>Liveness falls back to file recency instead — a status file touched within the last 15 minutes counts as live.</p>
+  </div>
+
+  <div class="problem">
+    <h3>The bar is a drag surface, so nothing could be hovered or clicked</h3>
+    <p>The whole bar is <code>-webkit-app-region: drag</code> so you can move it from anywhere. Chromium delivers <strong>no mouse events at all</strong> over a drag region: <code>mousemove</code> never fires, and <code>:hover</code> never matches. The expand-on-hover simply stopped working the moment the bar became draggable.</p>
+    <p>Hover is hit-tested in script instead. The pointer is polled from the OS once a frame and compared against the bar's own rectangle, measured every frame — the expanded rectangle contains the collapsed one, so the state settles instead of oscillating between the two.</p>
+  </div>
+
+  <div class="problem">
+    <h3>Right-clicking the bar opened the wrong menu</h3>
+    <p>The same drag region made the app's menu unreachable. Windows hit-tests a drag surface as the window caption, so a right-click was answered by <strong>Windows' own Move/Size/Close menu</strong> before the app ever saw it. Hooking the native messages does not help: <code>hookWindowMessage</code> only observes them and cannot pre-empt <code>DefWindowProc</code>, which was verified on both button-down and button-up.</p>
+    <p>So the menu moved behind a small ⋮ button that opts out of the drag region with <code>no-drag</code> — a deliberate hole in the drag surface that does receive clicks.</p>
+  </div>
+
+  <div class="problem">
+    <h3>The weekly number read 0% when it was really 11%</h3>
+    <p>The usage API returns more than one entry in the weekly group: <code>weekly_all</code>, the account-wide figure the web app shows, and a narrower <code>weekly_scoped</code> that sits at zero. The parser assigned on every match as it walked the array, so <strong>whichever came last won</strong> — and the zero landed on top of the real number.</p>
+    <p>It now picks <code>weekly_all</code> explicitly, so array order no longer decides what you see.</p>
+  </div>
+</section>
+
+<section id="platform">
+  <h2>Cross-platform</h2>
+  <p>Runs on Windows, macOS and Linux, packaged with electron-builder.</p>
+  <p>Dragging the bar to another monitor re-acquires that display's capture and its scale factor — a capture stream only ever contains the one display it was opened for, so without this the bar keeps sampling the old screen with coordinates that fall outside the frame.</p>
+  <p>On Windows the overlay always runs natively. When Claude Code runs inside WSL — the usual setup — it reads the status files across that boundary over <code>\\wsl.localhost\</code>, probing every installed distribution; when Claude Code runs natively too, it finds them in <code>%TEMP%</code>. Both are probed, so a machine with several distributions and a native install at once needs no configuration.</p>
+</section>
+
+<section id="get">
+  <h2>Get it</h2>
+  <p><a href="https://github.com/NoamElyasim/claude-usage-overlay/releases/latest">Download a build</a> for Windows, macOS or Linux, or run it from source:</p>
+  <pre><code>git clone https://github.com/NoamElyasim/claude-usage-overlay
+cd claude-usage-overlay
+npm install
+npm start</code></pre>
+  <p>Sign in once through the app's own window — an email code, since Google sign-in refuses an embedded browser. The session lives in the OS user-data dir and survives restarts. Nothing else to configure: the org id is discovered on first run and the status directory is probed.</p>
+</section>
+
+<footer id="footer">
+  <p>Built by Noam Elyasim · <a id="footer-repo" href="https://github.com/NoamElyasim/claude-usage-overlay">Source on GitHub</a> · <a href="https://github.com/NoamElyasim">GitHub profile</a></p>
+</footer>
+
+<script type="module" src="assets/js/hero.js"></script>
+</body>
+</html>
