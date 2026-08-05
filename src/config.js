@@ -10,7 +10,10 @@ const FILE = path.join(app.getPath('userData'), 'config.json');
 const DEFAULTS = {
   orgId: null,        // discovered from /api/organizations on first run
   position: null,     // { x, y } in DIP, restored on launch
-  openAtLogin: false,
+  // On by default: a status bar you have to remember to launch is a status bar
+  // you stop seeing. Turn it off from the menu; the choice is then written
+  // here and wins over this default.
+  openAtLogin: true,
   statusDirs: null,   // override: array of dirs the Claude Code hooks write to
 };
 
