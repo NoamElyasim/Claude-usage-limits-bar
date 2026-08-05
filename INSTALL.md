@@ -27,8 +27,8 @@ Grab the latest from [Releases](../../releases/latest):
 
 | File | For |
 | --- | --- |
-| `Claude Usage Overlay Setup <version>.exe` | Windows, installed |
-| `Claude Usage Overlay <version>.exe` | Windows, portable — no install |
+| `Claude Usage Limits Bar Setup <version>.exe` | Windows, installed |
+| `Claude Usage Limits Bar <version>.exe` | Windows, portable — no install |
 
 Windows builds are unsigned, so SmartScreen warns on first launch:
 **More info → Run anyway**. macOS and Linux builds are not published; produce
@@ -64,7 +64,7 @@ Each target has to be built on its own OS: the mac build needs `codesign` and
 the Windows build needs to stamp the .exe, neither of which cross-compiles here.
 
 The macOS build is unsigned, so the first launch needs
-**right-click → Open** (or `xattr -dr com.apple.quarantine "/Applications/Claude Usage Overlay.app"`).
+**right-click → Open** (or `xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"`).
 
 ### Per-OS notes
 
@@ -115,14 +115,23 @@ a fresh install registers itself.
 Remove the old one first, in this order:
 
 1. **Stop it.** The tkinter version is a `pythonw.exe` process; the Electron one
-   is `Claude Usage Overlay.exe`. Task Manager will do.
+   is `Claude Usage Limits Bar.exe`, or `Claude Usage Overlay.exe` if it predates
+   the 1.2.0 rename. Task Manager will do.
 2. **Remove its autostart.** Press <kbd>Win</kbd>+<kbd>R</kbd>, run
    `shell:startup`, and delete any overlay `.vbs` or shortcut there. The tkinter
    version launched from a `.vbs` in that folder, and it will keep coming back
    after every reboot until it is gone.
 3. **Uninstall properly** if an older *Electron* build is installed — Settings →
-   Apps, or `Uninstall Claude Usage Overlay.exe` in its folder. Deleting the
-   folder by hand leaves the uninstall entry and the login item behind.
+   Apps, or the `Uninstall …exe` in its folder. Deleting the folder by hand
+   leaves the uninstall entry and the login item behind.
+
+**Upgrading across the 1.2.0 rename.** The app was called *Claude Usage
+Overlay* until 1.2.0, and the rename changed its `appId`, so the new installer
+does **not** replace the old one — uninstall the old app or you get two of
+everything, two entries in Apps and two login items. Your session and settings
+do carry over: on first launch the app copies the old user-data directory to
+the new one, so you stay signed in and the bar reappears where you left it. The
+old directory is copied, not moved, and can be deleted once you are happy.
 
 Your settings survive an in-place upgrade: the installer writes to
 `%LOCALAPPDATA%\Programs`, while cookies and `config.json` live in `%APPDATA%`

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Usage Overlay
+# Claude Usage Limits Bar
 
 **Know how much Claude you have left, without leaving what you're doing.**
 

@@ -4,6 +4,11 @@ const {
 } = require('electron');
 const path = require('path');
 
+// Before anything else touches userData: config resolves its path at require
+// time, and the cookie jar opens on ready. Both would land in an empty folder
+// after the rename if this ran later.
+require('./src/migrate')();
+
 const config = require('./src/config');
 const auth = require('./src/auth');
 const usage = require('./src/usage');
