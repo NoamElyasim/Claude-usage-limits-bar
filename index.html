@@ -198,7 +198,7 @@
       // No claude.ai session: the numbers can't be fetched at all. Say so
       // instead of showing dashes that look like a network hiccup.
       timer.textContent = '⚠ sign in';
-      reset5El.textContent = reset7El.textContent = 'right-click → Sign in';
+      reset5El.textContent = reset7El.textContent = 'menu ⋮ → Sign in';
       return;
     }
     timer.textContent = '⏱ ' + fmtCountdown(resetsAt5);
