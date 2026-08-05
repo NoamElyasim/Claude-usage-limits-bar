@@ -93,6 +93,23 @@
     color: rgba(255,255,255,0.75); font-size: 11px; white-space: nowrap;
     text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.5);
   }
+  /* The menu button opts out of the drag region: Chromium delivers no mouse
+     events over one, which is why right-clicking the bar raises Windows' own
+     caption menu instead of ours. no-drag carves a hole that does get clicks —
+     and :hover matches here for the same reason. */
+  #menu-btn {
+    -webkit-app-region: no-drag;
+    flex: none; width: 18px; height: 20px; border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; cursor: pointer; position: relative; z-index: 3;
+    opacity: 0.6; transition: opacity 0.2s ease, background-color 0.2s ease;
+  }
+  #menu-btn:hover { opacity: 1; background: rgba(255,255,255,0.22); }
+  #menu-btn i {
+    width: 3px; height: 3px; border-radius: 50%; flex: none;
+    background: rgba(255,255,255,0.95);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
   #detail {
     display: none; align-items: center; justify-content: center; gap: 16px;
     padding: 2px 0 4px; color: rgba(255,255,255,0.8); font-size: 11px;
@@ -114,6 +131,7 @@
     <span class="lbl">7d</span>
     <span class="track"><span class="fill" id="fill-7d">—</span></span>
     <span id="timer">⏱ —</span>
+    <span id="menu-btn" title="Menu"><i></i><i></i><i></i></span>
   </div>
   <div id="detail">
     <span>5h window resets at <b id="reset-5h">—</b></span>
@@ -215,6 +233,15 @@
   }
   setInterval(drawDot, 1000);
   window.usage.onStatus((st) => { status = st || 'none'; drawDot(); });
+
+  // ─── Menu button ────────────────────────────────────────────────────────────
+  // Left- or right-clicking it asks the main process to pop the same menu the
+  // 'context-menu' handler builds. Optional-chained so the hovertest harness,
+  // whose preload stub predates this, still loads.
+  const menuBtn = document.getElementById('menu-btn');
+  const openMenu = (e) => { e.preventDefault(); e.stopPropagation(); window.overlay?.showMenu?.(); };
+  menuBtn.addEventListener('click', openMenu);
+  menuBtn.addEventListener('contextmenu', openMenu);
 
   // ─── Pointer: polled from the OS, never from DOM events ─────────────────────
   // #widget is a -webkit-app-region: drag surface and Chromium delivers no mouse

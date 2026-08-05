@@ -95,7 +95,21 @@ function createWindow() {
   screen.on('display-added', sendBounds);
   screen.on('display-removed', sendBounds);
 
-  win.webContents.on('context-menu', () => Menu.buildFromTemplate(menuTemplate()).popup());
+  const popupMenu = () => Menu.buildFromTemplate(menuTemplate()).popup({ window: win });
+
+  // Only fires over the parts of the window that are not a drag region — the
+  // transparent margin, and the menu button that opts out with no-drag.
+  win.webContents.on('context-menu', popupMenu);
+  ipcMain.handle('show-menu', popupMenu);
+
+  // Right-clicking the bar itself cannot reach us at all: a
+  // -webkit-app-region: drag surface is hit-tested as the window caption, so
+  // Windows treats the click as non-client and raises its own
+  // Move/Size/Close menu. hookWindowMessage on WM_NCRBUTTONDOWN and
+  // WM_NCRBUTTONUP were both tried — the hook only observes the message, it
+  // cannot stop DefWindowProc, and the caption menu wins either way. The
+  // menu button above is the way in; undoing this would mean dropping the
+  // drag region and moving the window from script instead.
 
   win.webContents.once('did-finish-load', () => {
     sendBounds();

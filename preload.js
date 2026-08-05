@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('usage', {
   onStatus: (cb) => ipcRenderer.on('status-update', (_e, st) => cb(st)),
 });
 
+contextBridge.exposeInMainWorld('overlay', {
+  showMenu: () => ipcRenderer.invoke('show-menu'),
+});
+
 contextBridge.exposeInMainWorld('glass', {
   getScreenSource: (displayId) => ipcRenderer.invoke('get-screen-source', displayId),
   getBounds: () => ipcRenderer.invoke('get-bounds'),

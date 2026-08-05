@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('usage', {
   onStatus: () => {},
 });
 
+contextBridge.exposeInMainWorld('overlay', {
+  showMenu: () => {},
+});
+
 contextBridge.exposeInMainWorld('glass', {
   getScreenSource: (displayId) => ipcRenderer.invoke('get-screen-source', displayId),
   getBounds: () => ipcRenderer.invoke('get-bounds'),
