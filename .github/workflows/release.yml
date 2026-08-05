@@ -44,7 +44,10 @@ jobs:
       - run: npm ci
 
       - name: Build
-        run: npm run ${{ matrix.script }}
+        # --publish never: electron-builder starts publishing by itself once it
+        # detects CI and then fails the build asking for a token. Uploading is
+        # the next step's job, with the workflow's own GITHUB_TOKEN.
+        run: npm run ${{ matrix.script }} -- --publish never
         env:
           # Nothing is signed: there is no Apple certificate and no Windows
           # cert. Left explicit so electron-builder does not go looking for one
