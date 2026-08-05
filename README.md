@@ -62,7 +62,14 @@ and runs as-is.
 <details>
 <summary><b>macOS</b></summary>
 
-Download the `.dmg`, open it, drag the app to Applications.
+Take the `.dmg` that matches your Mac, open it, drag the app to Applications.
+
+| Your Mac | File |
+| --- | --- |
+| Apple Silicon (M1 and later) | `…-arm64.dmg` |
+| Intel | `….dmg` — the one without `arm64` |
+
+Not sure? **Apple menu → About This Mac**: "Apple M…" means Apple Silicon.
 
 The build is unsigned, so the first launch needs **right-click → Open** rather
 than a double-click. If macOS refuses outright:

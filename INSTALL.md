@@ -21,7 +21,8 @@ Nothing to install first — no Node, no clone.
 | --- | --- | --- |
 | Windows | `Claude Usage Limits Bar Setup <version>.exe` | Run it |
 | Windows, no install | `Claude Usage Limits Bar <version>.exe` | Run it — portable |
-| macOS | `Claude Usage Limits Bar-<version>.dmg` | Open, drag to Applications |
+| macOS, Apple Silicon | `Claude Usage Limits Bar-<version>-arm64.dmg` | Open, drag to Applications |
+| macOS, Intel | `Claude Usage Limits Bar-<version>.dmg` | Open, drag to Applications |
 | Linux | `Claude Usage Limits Bar-<version>.AppImage` | `chmod +x`, then run |
 
 Nothing here is code-signed — there is no Apple certificate and no Windows
