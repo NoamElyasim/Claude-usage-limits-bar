@@ -633,6 +633,10 @@
       let S, texW, texH, sf;
       if (mode === 'native') {
         if (!tile) return;
+        // Read the window position here rather than waiting for a 'move'
+        // over IPC: during a drag that arrives late (or, on macOS, not until
+        // the drag pauses), and the backdrop visibly trails the bar.
+        bounds = { x: window.screenX, y: window.screenY, width: bounds.width, height: bounds.height };
         S = tile.rect; texW = tile.width; texH = tile.height; sf = tile.scale;
       } else {
         if (!src || !video || video.readyState < 2 || !video.videoWidth) return;
