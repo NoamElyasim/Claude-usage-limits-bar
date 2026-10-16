@@ -80,6 +80,16 @@ function compile(gl, type, src) {
   return sh;
 }
 
+// GLSL ES 1.00 for shaders from before the WebGL2 port, 3.00 after; picked
+// per shader so a diff can still compare across the port.
+const VS3 = `#version 300 es
+  in vec2 aPos;
+  out vec2 vUv;
+  void main() {
+    vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
+    gl_Position = vec4(aPos, 0.0, 1.0);
+  }
+`;
 const VS = `
   attribute vec2 aPos;
   varying vec2 vUv;
@@ -159,9 +169,10 @@ function compareShaders(oldSrc, newSrc) {
 }
 
 function drawBar(canvas, bgCanvas, fsSource, dodgeCursor) {
-  const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+  const es3 = fsSource.trimStart().startsWith('#version 300 es');
+  const gl = canvas.getContext(es3 ? 'webgl2' : 'webgl', { alpha: true, premultipliedAlpha: false });
   const prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, es3 ? VS3 : VS));
   gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, fsSource));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));

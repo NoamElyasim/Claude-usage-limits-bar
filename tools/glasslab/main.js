@@ -34,13 +34,15 @@ app.whenReady().then(async () => {
   await win.loadFile(path.join(HERE, 'harness.html'));
 
   if (MODE === 'diff') {
-    const head = extract(execFileSync('git', ['show', 'HEAD:index.html'], { cwd: REPO, encoding: 'utf8' }));
+    // GLASSLAB_BASE=<rev> compares against another revision instead of HEAD.
+    const base = process.env.GLASSLAB_BASE || 'HEAD';
+    const head = extract(execFileSync('git', ['show', `${base}:index.html`], { cwd: REPO, encoding: 'utf8' }));
     const report = await win.webContents.executeJavaScript(
       `compareShaders(${JSON.stringify(head)}, ${JSON.stringify(current)})`);
     const text = report
       .map((r) => `${r.scene.padEnd(22)} maxDelta=${String(r.maxDelta).padStart(3)}  meanDelta=${r.meanDelta}`)
       .join('\n');
-    console.log('working tree vs HEAD, per scene:\n' + text);
+    console.log(`working tree vs ${base}, per scene:\n` + text);
     fs.writeFileSync(path.join(HERE, 'diff.txt'), text + '\n');
   } else {
     await win.webContents.executeJavaScript(`renderAll(${JSON.stringify(current)})`);
