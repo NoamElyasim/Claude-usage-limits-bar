@@ -377,7 +377,9 @@
     const canvas = document.getElementById('glass-canvas');
     const widgetEl = document.getElementById('widget');
     const noGlass = (on) => widgetEl.classList.toggle('no-glass', on);
-    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+    // WebGL2 for mipmaps on non-power-of-two textures, which the macOS path
+    // blurs from (see frost below).
+    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false });
     if (!gl) { noGlass(true); return; }
 
     // Re-sized whenever the widget lands on a monitor with a different scale
@@ -392,17 +394,18 @@
     }
     sizeCanvas(dpr);
 
-    const vsSource = `
-      attribute vec2 aPos;
-      varying vec2 vUv;
+    const vsSource = `#version 300 es
+      in vec2 aPos;
+      out vec2 vUv;
       void main() {
         vUv = vec2(aPos.x * 0.5 + 0.5, 1.0 - (aPos.y * 0.5 + 0.5));
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
-    const fsSource = `
+    const fsSource = `#version 300 es
       precision mediump float;
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
       uniform sampler2D uVideo;
       uniform vec2 uCropOrigin;
       uniform vec2 uCropSize;
@@ -417,6 +420,8 @@
       uniform vec2 uCursorUv;      // pointer position in video-texture space
       uniform vec2 uCursorRadUv;   // dodge radius per axis; 0 = pointer not over the bar
       uniform float uSwapRB;       // 1 when the texture holds BGRA (the macOS helper's frames)
+      uniform float uTexPerPx;     // texture texels per canvas pixel
+      uniform float uUseLod;       // 1 when the texture has mipmaps to blur from
 
       float sdRoundBox(vec2 p, vec2 b, float r) {
         vec2 q = abs(p) - b + r;
@@ -438,21 +443,28 @@
         return uCursorUv + (q / max(r, 1e-4)) * uCursorRadUv;
       }
 
-      vec3 samp(vec2 uv) {
-        vec4 c = texture2D(uVideo, dodgeCursor(uv));
+      vec3 samp(vec2 uv, float lod) {
+        vec4 c = textureLod(uVideo, dodgeCursor(uv), lod);
         return mix(c.rgb, c.bgr, uSwapRB);
       }
 
       // 13-tap disc blur (centre + two hex rings) — the frosted part of the glass.
+      // Thirteen point samples a few pixels apart only read as blur over soft
+      // content; over sharp, high-contrast text (a sticky note, say) each tap
+      // shows its own crisp copy, and the glass fills with a grid of ghost
+      // glyphs. Where the texture has mipmaps, each tap instead reads the level
+      // whose texels are as wide as the gap between taps, so the taps overlap
+      // and what was a grid of copies becomes a continuous blur.
       vec3 frost(vec2 uv, vec2 texel, float rad) {
-        vec3 sum = samp(uv) * 1.5;
+        float lod = uUseLod * log2(max(1.0, rad * 0.5 * uTexPerPx));
+        vec3 sum = samp(uv, lod) * 1.5;
         float total = 1.5;
         for (int i = 0; i < 6; i++) {
           float a = float(i) * 1.0471975512;               // 2pi / 6
           vec2 outer = vec2(cos(a), sin(a));
           vec2 inner = vec2(cos(a + 0.5235987756), sin(a + 0.5235987756));
-          sum += samp(uv + outer * rad * texel);
-          sum += samp(uv + inner * rad * 0.5 * texel);
+          sum += samp(uv + outer * rad * texel, lod);
+          sum += samp(uv + inner * rad * 0.5 * texel, lod);
           total += 2.0;
         }
         return sum / total;
@@ -540,7 +552,7 @@
         // read. Same idea as a system material darkening over light content.
         col = mix(col, col * 0.70, hot);
 
-        gl_FragColor = vec4(clamp(col, 0.0, 1.0), edgeAA);
+        fragColor = vec4(clamp(col, 0.0, 1.0), edgeAA);
       }
     `;
 
@@ -589,6 +601,8 @@
     const uCursorUv = gl.getUniformLocation(prog, 'uCursorUv');
     const uCursorRadUv = gl.getUniformLocation(prog, 'uCursorRadUv');
     const uSwapRB = gl.getUniformLocation(prog, 'uSwapRB');
+    const uTexPerPx = gl.getUniformLocation(prog, 'uTexPerPx');
+    const uUseLod = gl.getUniformLocation(prog, 'uUseLod');
 
     // Screen coordinates cover a pointer just outside the bar too, which still
     // bleeds ghost cursors inward through the blur.
@@ -678,6 +692,8 @@
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, f.width, f.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.pixels);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         const scale = f.width / f.rect.width;
         if (!tile || tile.scale !== scale) sizeCanvas(scale);
         tile = { rect: f.rect, width: f.width, height: f.height, scale };
@@ -763,6 +779,11 @@
       gl.useProgram(prog);
       gl.uniform1i(uVideo, 0);
       gl.uniform1f(uSwapRB, mode === 'native' ? 1.0 : 0.0);
+      // Only the helper's frames get mipmaps: the desktop path uploads a whole
+      // display every frame, and generating a mip chain for that each frame is
+      // not worth it there. At lod 0 the shader samples exactly as before.
+      gl.uniform1f(uUseLod, mode === 'native' ? 1.0 : 0.0);
+      gl.uniform1f(uTexPerPx, (texW * (r.width / S.width)) / canvas.width);
       gl.uniform2f(uCropOrigin, ux, uy);
       gl.uniform2f(uCropSize, r.width / S.width, r.height / S.height);
       gl.uniform2f(uSizePx, canvas.width, canvas.height);
