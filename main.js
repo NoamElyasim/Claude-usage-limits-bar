@@ -242,6 +242,15 @@ ipcMain.handle('get-glass-mode', () => (macCapture.available() ? 'native' : 'des
 // and Chromium delivers no mouse events over a drag region.
 ipcMain.handle('get-cursor-point', () => screen.getCursorScreenPoint());
 
+// Pointer and window position in one round trip, both read at call time. The
+// glass polls this every frame while it is moving: the renderer's own
+// window.screenX only catches up after the browser process relays the move,
+// which is late enough to see as the backdrop lagging behind a drag.
+ipcMain.handle('get-live-position', () => {
+  const b = win && !win.isDestroyed() ? win.getBounds() : null;
+  return { cursor: screen.getCursorScreenPoint(), win: b && { x: b.x, y: b.y } };
+});
+
 ipcMain.handle('get-screen-source', async (_e, displayId) => {
   const displays = screen.getAllDisplays();
   const disp = (displayId && displays.find((d) => String(d.id) === String(displayId)))

@@ -250,10 +250,39 @@
   // main process for it instead.
   let pointer = null;        // screen coordinates, DIP
   let pointerPending = false;
+  // Window position samples from the same poll, for the glass's motion
+  // prediction: { x, y, t } with t in performance.now() ms.
+  let winSample = null;
+  let winVel = { x: 0, y: 0 };   // DIP per ms, smoothed
+  function noteWindow(w) {
+    if (!w) return;
+    const t = performance.now();
+    if (winSample) {
+      const dt = t - winSample.t;
+      if (w.x !== winSample.x || w.y !== winSample.y) {
+        if (dt > 0 && dt < 100) {
+          const k = 0.5; // smoothing: steady drags read steady, jitter is damped
+          winVel.x = winVel.x * (1 - k) + ((w.x - winSample.x) / dt) * k;
+          winVel.y = winVel.y * (1 - k) + ((w.y - winSample.y) / dt) * k;
+        } else {
+          winVel = { x: 0, y: 0 };
+        }
+        winSample = { x: w.x, y: w.y, t };
+      } else if (dt > 40) {
+        winVel = { x: 0, y: 0 };   // held still: stop leading
+      }
+      return;
+    }
+    winSample = { x: w.x, y: w.y, t };
+  }
+
   function pollPointer() {
     if (pointerPending) return;
     pointerPending = true;
-    window.glass.cursorPoint()
+    const req = window.glass.livePosition
+      ? window.glass.livePosition().then((p) => { noteWindow(p.win); return p.cursor; })
+      : window.glass.cursorPoint();
+    req
       .then((p) => { pointer = p; })
       .catch(() => {})
       .finally(() => { pointerPending = false; });
@@ -513,6 +542,9 @@
     // bleeds ghost cursors inward through the blur.
     const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
     const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
+    // How far ahead of the polled window position the macOS glass draws while
+    // the bar moves — roughly the poll-to-glass latency. Tuned by eye.
+    const MOTION_LEAD_MS = 34;
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -633,10 +665,18 @@
       let S, texW, texH, sf;
       if (mode === 'native') {
         if (!tile) return;
-        // Read the window position here rather than waiting for a 'move'
-        // over IPC: during a drag that arrives late (or, on macOS, not until
-        // the drag pauses), and the backdrop visibly trails the bar.
-        bounds = { x: window.screenX, y: window.screenY, width: bounds.width, height: bounds.height };
+        // Position from the per-frame poll rather than 'move' events, which
+        // arrive late during a drag. Then lead it: the window server moves the
+        // window the instant the mouse moves, but this frame only reaches the
+        // screen a frame or two later, so the backdrop drawn for where the bar
+        // is now would show up trailing behind it. Drawing it for where the bar
+        // will be by then keeps the two together; at rest the lead is zero.
+        const base = winSample || { x: window.screenX, y: window.screenY };
+        bounds = {
+          x: base.x + winVel.x * MOTION_LEAD_MS,
+          y: base.y + winVel.y * MOTION_LEAD_MS,
+          width: bounds.width, height: bounds.height,
+        };
         S = tile.rect; texW = tile.width; texH = tile.height; sf = tile.scale;
       } else {
         if (!src || !video || video.readyState < 2 || !video.videoWidth) return;

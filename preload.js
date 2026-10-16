@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('glass', {
   getScreenSource: (displayId) => ipcRenderer.invoke('get-screen-source', displayId),
   getBounds: () => ipcRenderer.invoke('get-bounds'),
   cursorPoint: () => ipcRenderer.invoke('get-cursor-point'),
+  livePosition: () => ipcRenderer.invoke('get-live-position'),
   onBounds: (cb) => ipcRenderer.on('bounds-update', (_e, payload) => cb(payload)),
   mode: () => ipcRenderer.invoke('get-glass-mode'),
   onFrame: (cb) => ipcRenderer.on('glass-frame', (_e, frame) => cb(frame)),
