@@ -49,9 +49,10 @@ jobs:
         # the next step's job, with the workflow's own GITHUB_TOKEN.
         run: npm run ${{ matrix.script }} -- --publish never
         env:
-          # Nothing is signed: there is no Apple certificate and no Windows
-          # cert. Left explicit so electron-builder does not go looking for one
-          # and fail the job on a runner that has none.
+          # No Apple or Windows certificate. Left explicit so electron-builder
+          # does not go looking for one and fail the job on a runner that has
+          # none. The macOS app is still ad-hoc signed, by scripts/after-pack.js,
+          # because Electron's own signature on it has been revoked.
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Attach to release
@@ -60,6 +61,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          # The three jobs race to create the release; whichever loses just
+          # finds it already there.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY" ||
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
           # --clobber so a re-run replaces its own artifacts instead of failing
           # on a name that already exists.
           gh release upload "$TAG" ${{ matrix.artifacts }} --clobber --repo "$GITHUB_REPOSITORY"

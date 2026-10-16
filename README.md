@@ -62,25 +62,35 @@ and runs as-is.
 <details>
 <summary><b>macOS</b></summary>
 
-Take the `.dmg` that matches your Mac, open it, drag the app to Applications.
+Paste this into **Terminal** and press Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NoamElyasim/Claude-usage-limits-bar/master/install.sh | bash
+```
+
+It picks the right build for your Mac (Apple Silicon or Intel), puts the app in
+Applications and starts it. Run the same line again to update.
+
+Then allow **Screen Recording** when macOS asks — the glass effect reads the
+desktop behind the bar. Without it you get a plain dark pill and everything else
+still works. After an update macOS may ask again.
+
+<details>
+<summary>Prefer the .dmg?</summary>
 
 | Your Mac | File |
 | --- | --- |
 | Apple Silicon (M1 and later) | `…-arm64.dmg` |
 | Intel | `….dmg` — the one without `arm64` |
 
-Not sure? **Apple menu → About This Mac**: "Apple M…" means Apple Silicon.
-
-The build is unsigned, so the first launch needs **right-click → Open** rather
-than a double-click. If macOS refuses outright:
+Open it and drag the app to Applications. The build is not notarized by Apple,
+so the first launch is blocked: open **System Settings → Privacy & Security**,
+scroll down and click **Open Anyway**. Or clear the download flag once:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"
 ```
-
-macOS then asks for **Screen Recording** permission — the glass effect reads the
-desktop behind the bar. Without it you get a plain dark pill and everything else
-still works.
+</details>
 </details>
 
 <details>

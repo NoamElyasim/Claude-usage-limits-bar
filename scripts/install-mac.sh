@@ -25,7 +25,7 @@ export MAC_SIGN_IDENTITY=$SIGN_ID
 
 bash scripts/build-glass-capture.sh
 npx electron-builder --mac dir "--$arch"
-codesign --force --deep -s "$SIGN_ID" "$out"
+# Signed by the afterPack hook (scripts/after-pack.js) with $MAC_SIGN_IDENTITY.
 
 pkill -x "$name" 2>/dev/null || true
 rm -rf "/Applications/$name.app"

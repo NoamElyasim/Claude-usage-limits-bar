@@ -31,8 +31,15 @@ the install, and it is a one-time click.
 
 **Windows.** SmartScreen shows a blue box: **More info → Run anyway**.
 
-**macOS.** First launch must be **right-click → Open**, not a double-click. If
-Gatekeeper refuses outright:
+**macOS.** Easiest is the one-line installer, which fetches the right .dmg
+itself and so never trips Gatekeeper:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NoamElyasim/Claude-usage-limits-bar/master/install.sh | bash
+```
+
+A .dmg downloaded in a browser is blocked on first launch instead: open
+System Settings → Privacy & Security and click **Open Anyway**, or run
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Claude Usage Limits Bar.app"
@@ -67,7 +74,8 @@ deliberately not in the repository, so `npm install` is not optional.
 
 ```bash
 npm run dist:win     # → dist/*.exe        (must be run on Windows)
-npm run dist:mac     # → dist/*.dmg        (must be run on macOS)
+npm run dist:mac     # → dist/*.dmg        (must be run on macOS, with Xcode command line tools)
+npm run install:mac  # build for this Mac and install it into /Applications
 npm run dist:linux   # → dist/*.AppImage
 ```
 
@@ -81,7 +89,16 @@ that already exists, run that workflow manually and give it the tag.
 **macOS.** The refraction effect needs Screen Recording permission. macOS asks
 on first launch; if you miss the prompt, the bar falls back to a plain dark pill
 and the ⋮ menu gains an *Allow screen recording…* item. Grant it in
-System Settings → Privacy & Security → Screen Recording, then restart the app.
+System Settings → Privacy & Security → Screen Recording; the bar picks it up
+within a few seconds. The grant is tied to the app's signature, and release
+builds are only ad-hoc signed, so each update asks again.
+
+The glass there is fed by a small ScreenCaptureKit helper
+(`native/glass-capture.swift`, built by `npm run build:native`) rather than
+`desktopCapturer`: macOS hides a content-protected window only from *other*
+processes' captures, so `desktopCapturer` saw the bar itself and the glass
+refracted its own text. Helper messages go to
+`~/Library/Logs/Claude Usage Limits Bar/glass-capture.log`.
 The app has no Dock icon by design — use the ⋮ button on the bar for the menu.
 
 **Windows.** The overlay is a desktop app: install and run it **natively on
