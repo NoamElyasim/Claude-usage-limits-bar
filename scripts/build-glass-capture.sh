@@ -12,5 +12,5 @@ for arch in arm64 x86_64; do
     native/glass-capture.swift -o "$tmp/glass-capture-$arch"
 done
 lipo -create "$tmp"/glass-capture-* -output bin/glass-capture
-codesign --force -s - bin/glass-capture
+codesign --force -s "${MAC_SIGN_IDENTITY:--}" bin/glass-capture
 echo "built bin/glass-capture ($(lipo -archs bin/glass-capture))"

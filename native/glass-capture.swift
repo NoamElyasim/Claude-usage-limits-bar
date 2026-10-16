@@ -21,6 +21,13 @@
 //           then width*height*4 bytes of tightly packed BGRA.
 //   stderr  diagnostics only.
 // Exits when stdin closes, i.e. when the app that spawned it goes away.
+//
+// Permission: macOS only applies a Screen Recording grant to processes started
+// after it, and every capture call made without one raises the system prompt
+// again. So the helper checks silently first and, lacking access, exits with
+// status 3 instead of retrying; the app starts a fresh helper a few seconds
+// later, which is how a grant made meanwhile gets picked up. The prompt itself
+// is only raised when the app passes --request, once per launch.
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -167,6 +174,13 @@ final class Capturer: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
 }
 
 signal(SIGPIPE, SIG_IGN)
+
+if !CGPreflightScreenCaptureAccess() {
+  if CommandLine.arguments.contains("--request") { _ = CGRequestScreenCaptureAccess() }
+  log("glass-capture: no screen recording permission")
+  exit(3)
+}
+
 let capturer = Capturer()
 
 Thread {

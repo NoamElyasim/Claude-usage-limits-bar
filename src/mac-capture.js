@@ -26,8 +26,23 @@ function available() {
   return process.platform === 'darwin' && fs.existsSync(helperPath());
 }
 
+// Helper diagnostics go here rather than to a console nobody sees in a
+// packaged app: ~/Library/Logs/Claude Usage Limits Bar/glass-capture.log
+function logLine(line) {
+  try {
+    const dir = app.getPath('logs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'glass-capture.log'), `${new Date().toISOString()} ${line}\n`);
+  } catch (_) {}
+}
+
+const NO_PERMISSION = 3; // helper exit status, see glass-capture.swift
+const PERMISSION_RETRY_MS = 4000;
+
 function start(onFrame) {
   let child = null;
+  let asked = false; // the system prompt is raised at most once per launch
+  let lastErr = '';
   // Pipe chunks are ~64KB and a frame is ~1MB. Joining on every chunk copied
   // the growing buffer over and over, so chunks are queued and only joined
   // once a whole frame has arrived.
@@ -38,19 +53,27 @@ function start(onFrame) {
   let stopped = false;
 
   function launch() {
-    child = spawn(helperPath(), [], { stdio: ['pipe', 'pipe', 'pipe'] });
-    child.stderr.on('data', (d) => console.error(String(d).trim()));
+    const args = asked ? [] : ['--request'];
+    asked = true;
+    child = spawn(helperPath(), args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stderr.on('data', (d) => {
+      const msg = String(d).trim();
+      // The permission check repeats every few seconds; log it once per run.
+      if (msg !== lastErr) logLine(msg);
+      lastErr = msg;
+    });
     child.stdout.on('data', (chunk) => {
       chunks.push(chunk);
       queued += chunk.length;
       if (queued >= need) parse();
     });
-    child.on('exit', () => {
+    child.on('exit', (code) => {
       child = null;
       chunks = []; queued = 0; need = HEADER;
       lastReq = '';
-      // A crash should not take the glass down for good.
-      if (!stopped) setTimeout(launch, 2000);
+      // No permission yet: a fresh process is the only way to notice a grant.
+      // Anything else is a crash, which should not take the glass down for good.
+      if (!stopped) setTimeout(launch, code === NO_PERMISSION ? PERMISSION_RETRY_MS : 2000);
     });
     child.stdin.on('error', () => {});
   }
