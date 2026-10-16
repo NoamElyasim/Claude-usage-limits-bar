@@ -98,6 +98,12 @@ function createWindow() {
     if (nativeGlass) nativeGlass.track(win.getBounds(), force === true);
   }
   win.on('move', sendBounds);
+  // Lets the renderer pin the bar to the pointer for the length of a drag; see
+  // liveWindow() in index.html.
+  win.on('will-move', () => {
+    const b = win.getBounds();
+    win.webContents.send('drag-start', { cursor: screen.getCursorScreenPoint(), win: { x: b.x, y: b.y } });
+  });
   // Dragging to another monitor, a resolution change or hot-plugging a display
   // all invalidate the renderer's capture stream, so it needs to hear about them.
   screen.on('display-metrics-changed', sendBounds);

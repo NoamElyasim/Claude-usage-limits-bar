@@ -250,40 +250,90 @@
   // main process for it instead.
   let pointer = null;        // screen coordinates, DIP
   let pointerPending = false;
-  // Window position samples from the same poll, for the glass's motion
-  // prediction: { x, y, t } with t in performance.now() ms.
-  let winSample = null;
-  let winVel = { x: 0, y: 0 };   // DIP per ms, smoothed
-  function noteWindow(w) {
-    if (!w) return;
+
+  // ─── Live window position ───────────────────────────────────────────────────
+  // During a drag macOS only tells the app where its window is about ten times
+  // a second, in ~55px jumps, while the pointer is reported fresh on every
+  // poll. Anything placed from the reported position — the glass crop, the
+  // hover hit-test — trailed the bar and stuttered with it (hover collapsing
+  // and re-expanding as the pointer "left" a rect that hadn't caught up).
+  // The window moves rigidly with the pointer while it is dragged, so during a
+  // drag its position is taken as pointer minus the grab offset instead.
+  let reported = null;       // last position the main process reported
+  let reportedAt = 0;        // when that position last changed
+  let grab = null;           // pointer − window while a drag is in progress
+  let lastGrab = null;       // kept so a drag that pauses can pick back up
+  let liveVel = { x: 0, y: 0 }, lastLive = null;   // DIP per ms, for the glass lead
+  let stillPointer = null;   // where the pointer last sat still: the likely grab point
+  let pointerMovedAt = 0;
+
+  // 'will-move' fires as the drag begins, before the window has moved, so the
+  // pointer then sits exactly where it grabbed the bar.
+  window.glass.onDragStart?.((p) => {
+    if (!p || !p.cursor || !p.win) return;
+    // By the time this arrives the pointer has already travelled a few px
+    // into the drag; where it last rested is the true press point.
+    const c = stillPointer && Math.hypot(p.cursor.x - stillPointer.x, p.cursor.y - stillPointer.y) < 24
+      ? stillPointer : p.cursor;
+    grab = lastGrab = { x: c.x - p.win.x, y: c.y - p.win.y };
+    reportedAt = performance.now();
+  });
+
+  function liveWindow() {
+    if (grab && pointer) return { x: pointer.x - grab.x, y: pointer.y - grab.y };
+    return reported || windowBounds || { x: window.screenX, y: window.screenY };
+  }
+
+  function noteLive(p) {
     const t = performance.now();
-    if (winSample) {
-      const dt = t - winSample.t;
-      if (w.x !== winSample.x || w.y !== winSample.y) {
-        if (dt > 0 && dt < 100) {
-          const k = 0.5; // smoothing: steady drags read steady, jitter is damped
-          winVel.x = winVel.x * (1 - k) + ((w.x - winSample.x) / dt) * k;
-          winVel.y = winVel.y * (1 - k) + ((w.y - winSample.y) / dt) * k;
-        } else {
-          winVel = { x: 0, y: 0 };
+    if (!pointer || pointer.x !== p.cursor.x || pointer.y !== p.cursor.y) pointerMovedAt = t;
+    else stillPointer = p.cursor;
+    pointer = p.cursor;
+    if (p.win) {
+      const moved = !reported || reported.x !== p.win.x || reported.y !== p.win.y;
+      if (moved) {
+        reportedAt = t;
+        // Moving again after a pause, with the pointer still at the old grab
+        // point: the same drag carrying on.
+        if (!grab && lastGrab && reported &&
+            Math.hypot(pointer.x - lastGrab.x - p.win.x, pointer.y - lastGrab.y - p.win.y) < 80) {
+          grab = lastGrab;
         }
-        winSample = { x: w.x, y: w.y, t };
-      } else if (dt > 40) {
-        winVel = { x: 0, y: 0 };   // held still: stop leading
       }
-      return;
+      reported = { x: p.win.x, y: p.win.y };
     }
-    winSample = { x: w.x, y: w.y, t };
+    if (grab && reported) {
+      // Released: the pointer moves on but the window stays put. Mid-drag the
+      // reported position changes at least every ~100ms, so a longer silence
+      // while the two disagree means the button is up. Far apart means the
+      // window was moved some other way (Reset position, a display change).
+      const est = liveWindow();
+      const off = Math.hypot(est.x - reported.x, est.y - reported.y);
+      if ((off > 6 && t - reportedAt > 140) || off > 240) grab = null;
+      // Paused mid-drag: pointer and window both at rest, so the reported
+      // position is current and the offset can be measured exactly.
+      else if (t - reportedAt > 120 && t - pointerMovedAt > 120) {
+        grab = lastGrab = { x: pointer.x - reported.x, y: pointer.y - reported.y };
+      }
+    }
+    const now = liveWindow();
+    if (grab && lastLive && t - lastLive.t > 0 && t - lastLive.t < 100) {
+      const k = 0.5;
+      liveVel.x = liveVel.x * (1 - k) + ((now.x - lastLive.x) / (t - lastLive.t)) * k;
+      liveVel.y = liveVel.y * (1 - k) + ((now.y - lastLive.y) / (t - lastLive.t)) * k;
+    } else if (!grab) {
+      liveVel = { x: 0, y: 0 };
+    }
+    lastLive = { x: now.x, y: now.y, t };
   }
 
   function pollPointer() {
     if (pointerPending) return;
     pointerPending = true;
     const req = window.glass.livePosition
-      ? window.glass.livePosition().then((p) => { noteWindow(p.win); return p.cursor; })
-      : window.glass.cursorPoint();
+      ? window.glass.livePosition().then(noteLive)
+      : window.glass.cursorPoint().then((p) => { pointer = p; });
     req
-      .then((p) => { pointer = p; })
       .catch(() => {})
       .finally(() => { pointerPending = false; });
   }
@@ -302,16 +352,18 @@
     requestAnimationFrame(hoverTick);
     pollPointer();
     if (!pointer || !windowBounds) return;
+    const wb = liveWindow();
     // Measured every frame: the bar grows when #detail unfolds, and the
     // expanded rect contains the collapsed one, so this settles instead of
     // oscillating.
     const r = hoverEl.getBoundingClientRect();
     const inside =
-      pointer.x >= windowBounds.x + r.left - HOVER_PAD &&
-      pointer.x <= windowBounds.x + r.right + HOVER_PAD &&
-      pointer.y >= windowBounds.y + r.top - HOVER_PAD &&
-      pointer.y <= windowBounds.y + r.bottom + HOVER_PAD;
-    hoverEl.classList.toggle('hovered', inside);
+      pointer.x >= wb.x + r.left - HOVER_PAD &&
+      pointer.x <= wb.x + r.right + HOVER_PAD &&
+      pointer.y >= wb.y + r.top - HOVER_PAD &&
+      pointer.y <= wb.y + r.bottom + HOVER_PAD;
+    // Held open for the whole drag, whatever the hit-test says.
+    hoverEl.classList.toggle('hovered', inside || !!grab);
   }
   requestAnimationFrame(hoverTick);
 
@@ -542,9 +594,9 @@
     // bleeds ghost cursors inward through the blur.
     const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
     const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
-    // How far ahead of the polled window position the macOS glass draws while
-    // the bar moves — roughly the poll-to-glass latency. Tuned by eye.
-    const MOTION_LEAD_MS = 34;
+    // How far ahead of the live window position the macOS glass draws while
+    // the bar is dragged — roughly the poll-to-screen latency.
+    const MOTION_LEAD_MS = 16;
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -665,16 +717,15 @@
       let S, texW, texH, sf;
       if (mode === 'native') {
         if (!tile) return;
-        // Position from the per-frame poll rather than 'move' events, which
-        // arrive late during a drag. Then lead it: the window server moves the
-        // window the instant the mouse moves, but this frame only reaches the
-        // screen a frame or two later, so the backdrop drawn for where the bar
-        // is now would show up trailing behind it. Drawing it for where the bar
-        // will be by then keeps the two together; at rest the lead is zero.
-        const base = winSample || { x: window.screenX, y: window.screenY };
+        // Live position (see liveWindow), then led a little: the window
+        // server moves the window the instant the mouse moves, but this frame
+        // only reaches the screen a frame or so later, so the backdrop drawn
+        // for where the bar is now would show up trailing it. At rest the lead
+        // is zero.
+        const base = liveWindow();
         bounds = {
-          x: base.x + winVel.x * MOTION_LEAD_MS,
-          y: base.y + winVel.y * MOTION_LEAD_MS,
+          x: base.x + liveVel.x * MOTION_LEAD_MS,
+          y: base.y + liveVel.y * MOTION_LEAD_MS,
           width: bounds.width, height: bounds.height,
         };
         S = tile.rect; texW = tile.width; texH = tile.height; sf = tile.scale;
