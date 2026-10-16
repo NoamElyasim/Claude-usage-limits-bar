@@ -56,6 +56,9 @@ for _ in 1 2 3 4 5 6; do
   [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null || break
   link=$(readlink "/proc/$p/fd/1" 2>/dev/null)
   case "$link" in /dev/pts/*) pts="$link"; break ;; esac
+  # macOS has no /proc: ask ps for the controlling tty instead.
+  t=$(ps -o tty= -p "$p" 2>/dev/null | tr -d ' ')
+  case "$t" in ''|'?'|'??') ;; *) pts="/dev/$t"; break ;; esac
   p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
 done
 [ -n "$pts" ] && [ -w "$pts" ] || exit 0

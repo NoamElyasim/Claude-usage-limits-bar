@@ -17,6 +17,7 @@
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
+    "install:mac": "bash scripts/install-mac.sh",
     "dist:linux": "electron-builder --linux"
   },
   "devDependencies": {

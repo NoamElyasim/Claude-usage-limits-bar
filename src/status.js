@@ -86,7 +86,10 @@ async function liveSessionIds() {
 
   let value = null;
   if (process.platform !== 'win32') {
-    const out = await run('pgrep', ['-af', 'session-id']);
+    // BSD pgrep (macOS) reads -a as "include ancestors" and prints bare pids;
+    // -l with -f is what prints the full command line there.
+    const flags = process.platform === 'darwin' ? '-lf' : '-af';
+    const out = await run('pgrep', [flags, 'session-id']);
     value = out ? out.toString('utf8') : null;
   } else {
     const found = [];
