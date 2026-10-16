@@ -22,3 +22,6 @@ tools/cursorprobe/out.png
 
 # Claude Code local permission state — per machine, not per project
 .claude/
+
+# Compiled macOS capture helper (npm run build:native)
+bin/

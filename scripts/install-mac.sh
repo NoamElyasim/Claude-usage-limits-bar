@@ -11,6 +11,7 @@ arch=$(uname -m)                       # arm64 or x86_64
 name="Claude Usage Limits Bar"
 out="dist/mac$([ "$arch" = arm64 ] && echo -arm64)/$name.app"
 
+bash scripts/build-glass-capture.sh
 npx electron-builder --mac dir "--$arch"
 codesign --force --deep -s - "$out"
 

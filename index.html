@@ -335,6 +335,7 @@
       uniform float uBloom;
       uniform vec2 uCursorUv;      // pointer position in video-texture space
       uniform vec2 uCursorRadUv;   // dodge radius per axis; 0 = pointer not over the bar
+      uniform float uSwapRB;       // 1 when the texture holds BGRA (the macOS helper's frames)
 
       float sdRoundBox(vec2 p, vec2 b, float r) {
         vec2 q = abs(p) - b + r;
@@ -356,16 +357,21 @@
         return uCursorUv + (q / max(r, 1e-4)) * uCursorRadUv;
       }
 
+      vec3 samp(vec2 uv) {
+        vec4 c = texture2D(uVideo, dodgeCursor(uv));
+        return mix(c.rgb, c.bgr, uSwapRB);
+      }
+
       // 13-tap disc blur (centre + two hex rings) — the frosted part of the glass.
       vec3 frost(vec2 uv, vec2 texel, float rad) {
-        vec3 sum = texture2D(uVideo, dodgeCursor(uv)).rgb * 1.5;
+        vec3 sum = samp(uv) * 1.5;
         float total = 1.5;
         for (int i = 0; i < 6; i++) {
           float a = float(i) * 1.0471975512;               // 2pi / 6
           vec2 outer = vec2(cos(a), sin(a));
           vec2 inner = vec2(cos(a + 0.5235987756), sin(a + 0.5235987756));
-          sum += texture2D(uVideo, dodgeCursor(uv + outer * rad * texel)).rgb;
-          sum += texture2D(uVideo, dodgeCursor(uv + inner * rad * 0.5 * texel)).rgb;
+          sum += samp(uv + outer * rad * texel);
+          sum += samp(uv + inner * rad * 0.5 * texel);
           total += 2.0;
         }
         return sum / total;
@@ -501,6 +507,7 @@
     const uBloom = gl.getUniformLocation(prog, 'uBloom');
     const uCursorUv = gl.getUniformLocation(prog, 'uCursorUv');
     const uCursorRadUv = gl.getUniformLocation(prog, 'uCursorRadUv');
+    const uSwapRB = gl.getUniformLocation(prog, 'uSwapRB');
 
     // Screen coordinates cover a pointer just outside the bar too, which still
     // bleeds ghost cursors inward through the blur.
@@ -566,10 +573,43 @@
       }
     }
 
+    // What the bound texture shows: the screen rect it covers (global DIP),
+    // its pixel size, and whether the OS pointer is baked into it.
+    //   desktop — a whole display from desktopCapturer, uploaded every frame
+    //   native  — a strip around the bar from the macOS helper, uploaded per
+    //             frame it sends; the pointer is left out of those
+    const mode = (await window.glass.mode?.()) || 'desktop';
+    let tile = null;   // { rect, width, height } for native frames
+    let tileSeq = 0;
+    // Native frames only arrive when the desktop changes, so redrawing on
+    // every animation frame in between would repaint identical pixels. The
+    // key covers everything the draw depends on.
+    let drawnKey = '';
+
+    if (mode === 'native') {
+      // Dark pill until the helper delivers its first frame — it sends none
+      // at all without Screen Recording permission.
+      noGlass(true);
+      window.glass.onFrame((f) => {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, f.width, f.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.pixels);
+        const scale = f.width / f.rect.width;
+        if (!tile || tile.scale !== scale) sizeCanvas(scale);
+        tile = { rect: f.rect, width: f.width, height: f.height, scale };
+        tileSeq++;
+        noGlass(false);
+      });
+    }
+
     let bounds = null;
     function applyPayload(p) {
       if (!p) return;
       bounds = p.bounds;
+      if (mode === 'native') {
+        if (tile && p.scaleFactor !== dpr) sizeCanvas(p.scaleFactor);
+        return;
+      }
       if (!src || src.displayId !== p.displayId) {
         attachDisplay(p.displayId);
       } else {
@@ -589,7 +629,15 @@
 
     function render() {
       requestAnimationFrame(render);
-      if (!src || !bounds || !video || video.readyState < 2 || !video.videoWidth) return;
+      if (!bounds) return;
+      let S, texW, texH, sf;
+      if (mode === 'native') {
+        if (!tile) return;
+        S = tile.rect; texW = tile.width; texH = tile.height; sf = tile.scale;
+      } else {
+        if (!src || !video || video.readyState < 2 || !video.videoWidth) return;
+        S = src.displayBounds; texW = video.videoWidth; texH = video.videoHeight; sf = src.scaleFactor;
+      }
 
       // Crop to the bar itself, not the whole window. The canvas only covers the
       // bar, so measuring the window here stretched a 640x130 slice of desktop
@@ -598,21 +646,30 @@
       // The bar changes height when #detail unfolds on hover, so the backing
       // store has to follow it — otherwise a 34px-tall texture gets stretched
       // over the taller bar and the corner radius and bevel go with it.
-      sizeCanvas(src.scaleFactor);
+      sizeCanvas(sf);
 
+      if (mode === 'native') {
+        const rr = widgetEl.getBoundingClientRect();
+        const key = `${tileSeq}|${bounds.x},${bounds.y}|${rr.top},${rr.height}|${canvas.width}x${canvas.height}`;
+        if (key === drawnKey) return;
+        drawnKey = key;
+      }
+
+      // The bar's rect in the texture's 0..1 space. Worked out in DIP against
+      // the rect the texture covers, so the same maths serves a whole-display
+      // capture and the helper's strip.
       const r = widgetEl.getBoundingClientRect();
-      const vx = (bounds.x + r.left - src.displayBounds.x) * src.scaleFactor;
-      const vy = (bounds.y + r.top - src.displayBounds.y) * src.scaleFactor;
-      const vw = r.width * src.scaleFactor;
-      const vh = r.height * src.scaleFactor;
+      const ux = (bounds.x + r.left - S.x) / S.width;
+      const uy = (bounds.y + r.top - S.y) / S.height;
 
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      if (mode !== 'native') gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 
       gl.useProgram(prog);
       gl.uniform1i(uVideo, 0);
-      gl.uniform2f(uCropOrigin, vx / video.videoWidth, vy / video.videoHeight);
-      gl.uniform2f(uCropSize, vw / video.videoWidth, vh / video.videoHeight);
+      gl.uniform1f(uSwapRB, mode === 'native' ? 1.0 : 0.0);
+      gl.uniform2f(uCropOrigin, ux, uy);
+      gl.uniform2f(uCropSize, r.width / S.width, r.height / S.height);
       gl.uniform2f(uSizePx, canvas.width, canvas.height);
       gl.uniform1f(uRadiusPx, 20 * dpr);
       // Retuned after the crop fix: the shader used to sample through a texel
@@ -628,14 +685,12 @@
 
       // A pointer nowhere near the bar costs nothing: no sample lands in the
       // dodge disc, so the whole thing is a no-op outside the crop.
-      if (pointer) {
-        const sf = src.scaleFactor;
+      // The helper's frames have no pointer in them, so nothing to dodge.
+      if (pointer && mode !== 'native') {
         gl.uniform2f(uCursorUv,
-          (pointer.x - src.displayBounds.x + CURSOR_NUDGE) * sf / video.videoWidth,
-          (pointer.y - src.displayBounds.y + CURSOR_NUDGE) * sf / video.videoHeight);
-        gl.uniform2f(uCursorRadUv,
-          (CURSOR_R * sf) / video.videoWidth,
-          (CURSOR_R * sf) / video.videoHeight);
+          (pointer.x - S.x + CURSOR_NUDGE) / S.width,
+          (pointer.y - S.y + CURSOR_NUDGE) / S.height);
+        gl.uniform2f(uCursorRadUv, CURSOR_R / S.width, CURSOR_R / S.height);
       } else {
         gl.uniform2f(uCursorRadUv, 0.0, 0.0);
       }

@@ -16,7 +16,8 @@
     "hovertest": "electron tools/hovertest",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
+    "build:native": "bash scripts/build-glass-capture.sh",
+    "dist:mac": "npm run build:native && electron-builder --mac",
     "install:mac": "bash scripts/install-mac.sh",
     "dist:linux": "electron-builder --linux"
   },
@@ -80,7 +81,13 @@
       "identity": null,
       "extendInfo": {
         "LSUIElement": 1
-      }
+      },
+      "extraResources": [
+        {
+          "from": "bin/glass-capture",
+          "to": "glass-capture"
+        }
+      ]
     },
     "linux": {
       "target": [

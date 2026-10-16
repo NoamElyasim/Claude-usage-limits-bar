@@ -13,6 +13,7 @@ const config = require('./src/config');
 const auth = require('./src/auth');
 const usage = require('./src/usage');
 const status = require('./src/status');
+const macCapture = require('./src/mac-capture');
 
 const POLL_MS = 30000;
 const STATUS_POLL_MS = 1000;
@@ -31,6 +32,7 @@ const LEGACY_COOKIE_FILES = [
 ];
 
 let win;
+let nativeGlass = null; // macOS capture helper, when in use
 
 // ─── Window placement ────────────────────────────────────────────────────────
 function defaultPosition() {
@@ -90,8 +92,10 @@ function createWindow() {
     }, 500);
   });
 
-  function sendBounds() {
-    if (win && !win.isDestroyed()) win.webContents.send('bounds-update', boundsPayload());
+  function sendBounds(force = false) {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('bounds-update', boundsPayload());
+    if (nativeGlass) nativeGlass.track(win.getBounds(), force === true);
   }
   win.on('move', sendBounds);
   // Dragging to another monitor, a resolution change or hot-plugging a display
@@ -117,10 +121,15 @@ function createWindow() {
   // drag region and moving the window from script instead.
 
   win.webContents.once('did-finish-load', () => {
-    sendBounds();
+    if (macCapture.available()) {
+      nativeGlass = macCapture.start((frame) => {
+        if (win && !win.isDestroyed()) win.webContents.send('glass-frame', frame);
+      });
+    }
+    sendBounds(true);
     // Safety net: 'move' covers dragging, but a failed capture attach or a
     // stream that ended on its own would otherwise never be retried.
-    setInterval(sendBounds, 2000);
+    setInterval(() => sendBounds(true), 2000);
     pushUsage();
     setInterval(pushUsage, POLL_MS);
     pushStatus();
@@ -224,6 +233,10 @@ function boundsPayload() {
 
 ipcMain.handle('get-bounds', () => boundsPayload());
 
+// 'native': frames arrive on 'glass-frame' from the macOS helper.
+// 'desktop': the renderer opens a desktopCapturer stream itself.
+ipcMain.handle('get-glass-mode', () => (macCapture.available() ? 'native' : 'desktop'));
+
 // The renderer needs the pointer to keep it out of the frosted glass, and it
 // cannot get it from DOM events: the bar is a -webkit-app-region: drag surface,
 // and Chromium delivers no mouse events over a drag region.
@@ -280,4 +293,5 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', () => app.quit());
+  app.on('will-quit', () => { if (nativeGlass) nativeGlass.stop(); });
 }
