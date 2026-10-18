@@ -7,10 +7,10 @@
   html, body {
     /* 40px of clearance each side of the 560px bar: the body clips overflow, so
        the drop shadow has to fade to nothing before it reaches the window edge
-       or it gets sliced off square. Tall enough for the 120px square and circle
-       plus their shadow; the empty part is click-through (see hoverTick). Must
+       or it gets sliced off square. Tall enough for the 224px vertical capsule
+       plus its shadow; the empty part is click-through (see hoverTick). Must
        match WIN_W / WIN_H in main.js. */
-    width: 640px; height: 190px;
+    width: 640px; height: 280px;
     background: transparent; overflow: hidden;
     user-select: none;
     font-family: -apple-system, 'Segoe UI Variable', 'Segoe UI', sans-serif;
@@ -128,7 +128,9 @@
      that class, and the glass shader reads both off the element every frame,
      so the material follows the morph by itself. Each shape has its own face;
      only the active one is shown. */
-  #widget.shape-capsule { width: 224px; height: 40px; border-radius: 20px; }
+  #widget.shape-capsule { width: 224px; height: 44px; border-radius: 22px; }
+  /* Rotated 90°: the same pill stood on end, hanging from the same point. */
+  #widget.shape-capsule.vertical { width: 44px; height: 224px; }
   #widget.shape-square  { width: 120px; height: 120px; border-radius: 32px; }
   #widget.shape-circle  { width: 120px; height: 120px; border-radius: 60px; }
 
@@ -176,9 +178,33 @@
   #widget.hovered .swap > .main { opacity: 0; }
   #widget.hovered .swap > .alt { opacity: 1; }
 
-  .face-capsule { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; }
+  /* Laid out at its final size, pinned top-centre, whatever size the container
+     is part-way through a morph: the items then have one fixed place in each
+     orientation to glide between, and the container just clips while it grows. */
+  .face-capsule {
+    inset: 0 auto auto 50%; width: 224px; height: 44px; margin-left: -112px;
+    display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px;
+  }
   .face-capsule .swap { flex: 1; }
   .face-capsule .main { display: flex; align-items: center; gap: 8px; }
+  .face-capsule .timer:not(.warn)::before { content: '⏱ '; }
+  .face-capsule .alt .d + .t { margin-left: 0.25em; }
+
+  #widget.vertical .face-capsule {
+    width: 44px; height: 224px; margin-left: -22px;
+    flex-direction: column; gap: 6px; padding: 14px 0 8px;
+  }
+  #widget.vertical .face-capsule .swap { align-items: center; justify-items: center; }
+  #widget.vertical .face-capsule .main { flex-direction: column; gap: 4px; }
+  #widget.vertical .face-capsule .mini { margin: 0 0 -2px 0; }
+  #widget.vertical .face-capsule .timer { margin: 4px 0 0; font-size: 9.5px; }
+  #widget.vertical .face-capsule .timer::before { content: none; }
+  #widget.vertical .face-capsule .alt { flex-direction: column; gap: 10px; font-size: 9px; }
+  #widget.vertical .face-capsule .alt > span {
+    display: flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.25;
+  }
+  #widget.vertical .face-capsule .alt b { display: flex; flex-direction: column; align-items: center; }
+  #widget.vertical .face-capsule .alt .d + .t { margin-left: 0; }
   .face-capsule .alt {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     color: rgba(255,255,255,0.8); font-size: 10.5px; white-space: nowrap;
@@ -249,7 +275,7 @@
         <span class="gauge"><svg viewBox="0 0 28 28"><circle class="stroke trk" cx="14" cy="14" r="11.5" pathLength="100"/><circle class="stroke val v7" cx="14" cy="14" r="11.5" pathLength="100"/></svg><b class="p7">—</b></span>
         <span class="timer">⏱ —</span>
       </div>
-      <div class="alt"><span>5h <b class="reset5">—</b></span><span>7d <b class="reset7">—</b></span></div>
+      <div class="alt"><span>5h <b class="reset5">—</b></span><span>7d <b class="reset7"><span class="d"></span><span class="t">—</span></b></span></div>
     </div>
     <span class="menu-btn" title="Menu"><i></i><i></i><i></i></span>
   </div>
@@ -386,14 +412,33 @@
     if (authNeeded) {
       // No claude.ai session: the numbers can't be fetched at all. Say so
       // instead of showing dashes that look like a network hiccup.
-      for (const el of all('.timer')) el.textContent = '⚠ sign in';
+      for (const el of all('.timer')) { el.textContent = '⚠ sign in'; el.classList.add('warn'); }
       for (const el of all('#detail .reset5, #detail .reset7')) el.textContent = 'menu ⋮ → Sign in';
       for (const el of all('.alt .reset5, .alt .reset7')) el.textContent = '—';
       return;
     }
-    for (const el of all('.timer')) el.textContent = '⏱ ' + fmtCountdown(resetsAt5);
+    // The capsule draws its ⏱ in CSS, so the vertical capsule can drop it.
+    for (const el of all('.timer')) {
+      el.classList.remove('warn');
+      el.textContent = (el.closest('.face-capsule') ? '' : '⏱ ') + fmtCountdown(resetsAt5);
+    }
     for (const el of all('.reset5')) el.textContent = fmtClock(resetsAt5);
     for (const el of all('.reset7')) el.textContent = fmtDayClock(resetsAt7);
+    for (const el of all('.face-capsule .reset5')) el.textContent = fmtClock(resetsAt5, 'numeric');
+    // Day and time as separate spans in the capsule: side by side when it is
+    // horizontal, stacked when it is 44px wide and vertical.
+    for (const el of all('.face-capsule .reset7')) {
+      const d = document.createElement('span'), t = document.createElement('span');
+      d.className = 'd'; t.className = 't';
+      if (resetsAt7) {
+        const at = new Date(resetsAt7);
+        d.textContent = at.toLocaleDateString([], { weekday: 'short' });
+        t.textContent = fmtClock(resetsAt7, 'numeric');
+      } else {
+        t.textContent = '—';
+      }
+      el.replaceChildren(d, t);
+    }
     // The square and circle have ~90px across inside their outlines: drop the
     // leading zero there so the 7d line clears the inner ring.
     for (const el of all('.face-round .reset5')) el.textContent = fmtClock(resetsAt5, 'numeric');
@@ -464,12 +509,16 @@
     widgetEl.classList.toggle('instant', !animate);
     widgetEl.classList.replace('shape-' + shape, 'shape-' + next);
     shape = next;
-    const to = widgetEl.getBoundingClientRect();
-    const toR = getComputedStyle(widgetEl).borderTopLeftRadius;
     const face = widgetEl.querySelector('.face-' + next);
     if (animate) drawIn(face);
-    if (instant) return;
+    if (!instant) morphContainer(from, fromR);
+  }
 
+  // Animates the container from a measured size and radius to whatever its
+  // classes now say.
+  function morphContainer(from, fromR) {
+    const to = widgetEl.getBoundingClientRect();
+    const toR = getComputedStyle(widgetEl).borderTopLeftRadius;
     morphAnim = widgetEl.animate([
       { width: from.width + 'px', height: from.height + 'px', borderRadius: fromR },
       { width: to.width + 'px', height: to.height + 'px', borderRadius: toR },
@@ -477,12 +526,54 @@
     morphAnim.onfinish = () => { morphAnim = null; };
   }
 
-  window.overlay?.getShape?.().then((s) => {
+  // ─── Capsule orientation ────────────────────────────────────────────────────
+  // Rotating the capsule is not a literal rotation — the text stays upright.
+  // The pill stretches from wide to tall while every item glides from its slot
+  // in the row to its slot in the column (FLIP: measure, re-lay out, then
+  // animate each item from where it was back to its new place).
+  let vertical = false;
+  let flipAnims = [];
+
+  function applyOrientation(next, animate) {
+    next = !!next;
+    if (next === vertical) return;
+    vertical = next;
+    if (shape !== 'capsule' || !animate || reduceMotion.matches) {
+      widgetEl.classList.toggle('vertical', next);
+      return;
+    }
+    const face = widgetEl.querySelector('.face-capsule');
+    const items = [...face.querySelectorAll('.dot, .main > *, .menu-btn')];
+    // Measured mid-flight if a rotation is interrupted, so it turns back from
+    // wherever it had got to.
+    const from = widgetEl.getBoundingClientRect();
+    const fromR = getComputedStyle(widgetEl).borderTopLeftRadius;
+    const before = items.map((el) => el.getBoundingClientRect());
+    if (morphAnim) { morphAnim.cancel(); morphAnim = null; }
+    for (const a of flipAnims) a.cancel();
+
+    widgetEl.classList.toggle('vertical', next);
+    const after = items.map((el) => el.getBoundingClientRect());
+    flipAnims = items.map((el, i) => {
+      const dx = (before[i].left + before[i].width / 2) - (after[i].left + after[i].width / 2);
+      const dy = (before[i].top + before[i].height / 2) - (after[i].top + after[i].height / 2);
+      return el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+        { duration: MORPH_MS, easing: MORPH_EASE });
+    });
+    morphContainer(from, fromR);
+  }
+
+  Promise.all([
+    window.overlay?.getShape?.(),
+    window.overlay?.getOrientation?.(),
+  ]).then(([s, o]) => {
+    applyOrientation(o === 'vertical', false);
     applyShape(s, false);
     // Transitions on only after the saved shape has been painted once.
     requestAnimationFrame(() => requestAnimationFrame(() => widgetEl.classList.remove('instant')));
   });
   window.overlay?.onShape?.((s) => applyShape(s, true));
+  window.overlay?.onOrientation?.((o) => applyOrientation(o === 'vertical', true));
 
   // ─── Pointer: polled from the OS, never from DOM events ─────────────────────
   // #widget is a -webkit-app-region: drag surface and Chromium delivers no mouse

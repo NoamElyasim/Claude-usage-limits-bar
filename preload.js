@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('overlay', {
   showMenu: () => ipcRenderer.invoke('show-menu'),
   getShape: () => ipcRenderer.invoke('get-shape'),
   onShape: (cb) => ipcRenderer.on('shape', (_e, shape) => cb(shape)),
+  getOrientation: () => ipcRenderer.invoke('get-orientation'),
+  onOrientation: (cb) => ipcRenderer.on('orientation', (_e, o) => cb(o)),
   setInteractive: (on) => ipcRenderer.send('set-interactive', !!on),
 });
 

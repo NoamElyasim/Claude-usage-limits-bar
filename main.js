@@ -19,12 +19,22 @@ const POLL_MS = 30000;
 const STATUS_POLL_MS = 1000;
 
 // Window is wider than the 560px bar so the CSS drop shadow has room to fade
-// out inside it, and tall enough for the 120px square and circle shapes; the
+// out inside it, and tall enough for the 224px vertical capsule; the
 // body clips anything past the edge. One size for every shape: resizing the
 // window mid-morph makes macOS show the old content shifted for a frame. The
 // empty area is click-through instead (setInteractive below). Must match
 // index.html.
-const WIN_W = 640, WIN_H = 190;
+const WIN_W = 640, WIN_H = 280;
+
+// Long enough for the renderer's 420ms morph to land before the captured area
+// shrinks back to the new shape alone.
+const MORPH_SETTLE_MS = 700;
+
+// Which capture area (src/mac-capture.js REGIONS) the current shape needs.
+function shapeKey() {
+  const shape = config.get('shape') || 'bar';
+  return shape === 'capsule' && config.get('capsuleOrientation') === 'vertical' ? 'capsule-vertical' : shape;
+}
 
 const SHAPES = [
   { id: 'bar', label: 'Bar' },
@@ -142,6 +152,7 @@ function createWindow() {
       nativeGlass = macCapture.start((frame) => {
         if (win && !win.isDestroyed()) win.webContents.send('glass-frame', frame);
       });
+      nativeGlass.setShape(null, shapeKey());
     }
     sendBounds(true);
     // Safety net: 'move' covers dragging, but a failed capture attach or a
@@ -215,10 +226,24 @@ function menuTemplate() {
         type: 'radio',
         checked: (config.get('shape') || 'bar') === sh.id,
         click: () => {
+          const from = shapeKey();
           config.set({ shape: sh.id });
+          if (nativeGlass) nativeGlass.setShape(from, shapeKey(), MORPH_SETTLE_MS);
           win.webContents.send('shape', sh.id);
         },
       })),
+    },
+    {
+      // Only the capsule has a second orientation.
+      label: 'Rotate 90°',
+      visible: (config.get('shape') || 'bar') === 'capsule',
+      click: () => {
+        const next = config.get('capsuleOrientation') === 'vertical' ? 'horizontal' : 'vertical';
+        const from = shapeKey();
+        config.set({ capsuleOrientation: next });
+        if (nativeGlass) nativeGlass.setShape(from, shapeKey(), MORPH_SETTLE_MS);
+        win.webContents.send('orientation', next);
+      },
     },
     { type: 'separator' },
     {
@@ -263,6 +288,7 @@ function boundsPayload() {
 ipcMain.handle('get-bounds', () => boundsPayload());
 
 ipcMain.handle('get-shape', () => config.get('shape') || 'bar');
+ipcMain.handle('get-orientation', () => config.get('capsuleOrientation') || 'horizontal');
 
 // Off while the pointer is away from the widget, so clicks on the window's
 // transparent margin reach whatever is underneath. The renderer decides, from

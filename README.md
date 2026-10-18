@@ -147,6 +147,7 @@ data lives, and troubleshooting.
 | **Hover** the bar | Lifts it and reveals the exact reset time for both windows. |
 | **Click the ⋮ button** | Opens the menu: Refresh now · Always on top · Start at login · Reset position · Shape · Sign in / Sign out · Quit. |
 | **⋮ → Shape** | Bar, Capsule, Square or Circle, for tight screens. The widget morphs into the new shape; the choice is remembered. |
+| **⋮ → Rotate 90°** | Capsule only: stands it on end, or lays it back down. Its contents glide into place. |
 
 Every shape keeps the glass, the status dot, the countdown and the colour
 stages. The capsule shows each window as a small ring; the square and circle

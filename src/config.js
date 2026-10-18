@@ -16,6 +16,7 @@ const DEFAULTS = {
   openAtLogin: true,
   statusDirs: null,   // override: array of dirs the Claude Code hooks write to
   shape: 'bar',       // 'bar' | 'capsule' | 'square' | 'circle', from the ⋮ menu
+  capsuleOrientation: 'horizontal',   // or 'vertical' (⋮ → Rotate 90°)
 };
 
 let cache = null;

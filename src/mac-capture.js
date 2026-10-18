@@ -10,13 +10,29 @@ const { app, screen } = require('electron');
 const MAGIC = 0x46534c47; // "GLSF"
 const HEADER = 32;
 
-// Desktop around the widget to capture, in window-local DIP. Reaches past the
-// widget on every side because the rim refracts outward and the wide bloom
-// blur reaches ~20px past the edge. Covers every shape — the 560px bar with
-// its hover detail row, and the 120px square and circle — so a morph never
-// runs off the captured strip. Must stay in step with #widget's geometry in
-// index.html.
-const REGION = { left: 12, top: -14, width: 616, height: 170 };
+// Desktop around the widget to capture, in window-local DIP, per shape. Each
+// reaches ~20px past the widget on every side because the rim refracts
+// outward and the wide bloom blur reaches that far. The bar's covers its hover
+// detail row. Must stay in step with #widget's geometry in index.html (640px
+// window, widget top-centred 12px down).
+const REGIONS = {
+  bar: { left: 12, top: -14, width: 616, height: 120 },
+  capsule: { left: 188, top: -14, width: 264, height: 96 },
+  'capsule-vertical': { left: 278, top: -14, width: 84, height: 276 },
+  square: { left: 240, top: -14, width: 160, height: 172 },
+  circle: { left: 240, top: -14, width: 160, height: 172 },
+};
+
+function regionFor(key) { return REGIONS[key] || REGIONS.bar; }
+
+function union(a, b) {
+  const left = Math.min(a.left, b.left), top = Math.min(a.top, b.top);
+  return {
+    left, top,
+    width: Math.max(a.left + a.width, b.left + b.width) - left,
+    height: Math.max(a.top + a.height, b.top + b.height) - top,
+  };
+}
 
 // Extra desktop captured around REGION, so a drag can move the bar this far
 // before the capture has to be retargeted; the retarget is requested once the
@@ -65,6 +81,8 @@ function start(onFrame) {
   let need = HEADER; // bytes the next step of parsing is waiting for
   let lastReq = '';
   let stopped = false;
+  let region = REGIONS.bar;
+  let lastBounds = null;
 
   function launch() {
     const args = asked ? [] : ['--request'];
@@ -152,7 +170,9 @@ function start(onFrame) {
   // `force` re-sends an unchanged rect: the helper ignores it while its stream
   // runs, but uses it to retry a start that failed for lack of permission.
   function track(bounds, force = false) {
+    lastBounds = bounds;
     if (!child) return;
+    const REGION = region;
     const disp = screen.getDisplayMatching(bounds);
     const db = disp.bounds;
     const clampX = (v) => Math.min(db.x + db.width, Math.max(db.x, v));
@@ -185,8 +205,27 @@ function start(onFrame) {
     if (child) child.kill();
   }
 
+  // Switch the captured area to another shape's. While a morph runs the area
+  // covers both shapes, then settles on the new one; either way the tile is
+  // re-centred on it at once rather than when the bar next nears its edge.
+  let settle = null;
+  function setShape(fromKey, toKey, morphMs = 0) {
+    clearTimeout(settle);
+    const apply = (r) => {
+      region = r;
+      tile = null;
+      if (lastBounds) track(lastBounds, true);
+    };
+    if (morphMs > 0) {
+      apply(union(regionFor(fromKey), regionFor(toKey)));
+      settle = setTimeout(() => apply(regionFor(toKey)), morphMs);
+    } else {
+      apply(regionFor(toKey));
+    }
+  }
+
   launch();
-  return { track, stop };
+  return { track, stop, setShape };
 }
 
 module.exports = { available, start };
