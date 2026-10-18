@@ -13,7 +13,7 @@ Windows · macOS · Linux · MIT
 
 **[Try the live bar →](https://noamelyasim.github.io/Claude-usage-limits-bar/)** — the real shader, running in your browser
 
-[Download](../../releases/latest) · [Install](#install) · [Using it](#using-it) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
+[Download](../../releases/latest) · [Install](#install) · [Using it](#using-it) · [Shapes](#shapes) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
 
 </div>
 
@@ -40,6 +40,8 @@ Windows · macOS · Linux · MIT
 - **Nothing to configure.** No API key, no config file to edit, no org id to
   paste. Sign in once through the app's own window; everything else is
   discovered.
+- **Fits any screen.** Bar, capsule (horizontal or vertical), square or circle —
+  [pick a shape](#shapes) and the widget morphs into it.
 - **Stays out of the way.** No dock icon, no taskbar button, no window chrome —
   just the bar, on top of everything, wherever you put it.
 
@@ -149,15 +151,44 @@ data lives, and troubleshooting.
 | **⋮ → Shape** | Bar, Capsule, Square or Circle, for tight screens. The widget morphs into the new shape; the choice is remembered. |
 | **⋮ → Rotate 90°** | Capsule only: stands it on end, or lays it back down. Its contents glide into place. |
 
-Every shape keeps the glass, the status dot, the countdown and the colour
-stages. The capsule shows each window as a small ring; the square and circle
-trace them as two outlines along their edge (outer 5h, inner 7d). Hovering a
-compact shape swaps the readout for the two reset times. Outside the widget the
-window is click-through, so its shadow margin never swallows a click.
-
 The menu sits behind a button rather than a right-click because the bar is a
 drag surface — Windows hit-tests that as the window caption and answers a
 right-click with its own Move/Size/Close menu before the app ever sees it.
+
+## Shapes
+
+Short on screen space? Pick a smaller form from **⋮ → Shape**. Every shape is
+the same widget: the same live glass, the same status dot and countdown, the
+same green → yellow → orange → red stages, draggable, and with the ⋮ menu.
+
+<p align="center">
+<img src="docs/shapes.png" alt="The widget as a bar, a capsule, a vertical capsule, a square and a circle, all in liquid glass over a colourful backdrop" width="760">
+</p>
+
+| Shape | Size | How it shows your usage |
+| --- | --- | --- |
+| **Bar** | 560 × 34 | Two horizontal bars, 5h and 7d. Hover unfolds a row with both reset times. |
+| **Capsule** | 224 × 44 | Two small rings with the percentage inside. |
+| **Capsule, rotated** | 44 × 224 | The same capsule stood on end (**⋮ → Rotate 90°**), for the edge of the screen. |
+| **Square** | 120 × 120 | Two outlines tracing the edge — outer is 5h, inner is 7d — around the 5h percentage, the 7d percentage and the countdown. |
+| **Circle** | 120 × 120 | The same as the square, as two rings. |
+
+On the capsule, square and circle, hovering swaps the numbers for the two reset
+times. The choice of shape, and the capsule's orientation, are remembered.
+
+Changing shape is a morph, not a cut: the glass stretches and rounds into the
+new form in about 0.4 s on the same curve iOS uses for its sheets, the old
+contents fade out and the new ones fade in, and the rings sweep up from empty.
+Rotating the capsule keeps the text upright — each item glides from its place
+in the row to its place in the column. With **Reduce Motion** turned on, shapes
+change with a simple crossfade.
+
+<p align="center">
+<img src="docs/shapes-morph.gif" alt="The widget morphing from a bar to a capsule, rotating to vertical, then becoming a square, a circle, and a bar again" width="640">
+</p>
+
+The window around the widget is click-through, so a small shape only takes the
+space it covers — the empty area and the shadow never swallow a click.
 
 ## What the bar tells you
 
@@ -221,6 +252,7 @@ them in `%TEMP%\claude-status`.
 npm start          # run from source
 npm run hovertest  # hover hit-test regression check
 npm run glasslab   # shader tuning harness
+npm run shapeshots # re-render docs/shapes.png and docs/shapes-morph.gif (needs ffmpeg)
 ```
 
 The bar calls `setContentProtection(true)` so the shader does not capture

@@ -14,6 +14,7 @@
     "glasslab": "electron tools/glasslab/main.js",
     "cursorprobe": "electron tools/cursorprobe",
     "hovertest": "electron tools/hovertest",
+    "shapeshots": "electron tools/shapeshots/main.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "build:native": "bash scripts/build-glass-capture.sh",
