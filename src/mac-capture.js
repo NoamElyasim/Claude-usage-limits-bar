@@ -10,11 +10,13 @@ const { app, screen } = require('electron');
 const MAGIC = 0x46534c47; // "GLSF"
 const HEADER = 32;
 
-// Desktop around the bar to capture, in window-local DIP. Wider than the bar on
-// every side because the rim refracts outward and the wide bloom blur reaches
-// ~20px past the edge; tall enough for the hover lift and the unfolded detail
-// row. Must stay in step with #widget's geometry in index.html.
-const REGION = { left: 12, top: -14, width: 616, height: 120 };
+// Desktop around the widget to capture, in window-local DIP. Reaches past the
+// widget on every side because the rim refracts outward and the wide bloom
+// blur reaches ~20px past the edge. Covers every shape — the 560px bar with
+// its hover detail row, and the 120px square and circle — so a morph never
+// runs off the captured strip. Must stay in step with #widget's geometry in
+// index.html.
+const REGION = { left: 12, top: -14, width: 616, height: 170 };
 
 // Extra desktop captured around REGION, so a drag can move the bar this far
 // before the capture has to be retargeted; the retarget is requested once the

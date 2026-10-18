@@ -19,8 +19,19 @@ const POLL_MS = 30000;
 const STATUS_POLL_MS = 1000;
 
 // Window is wider than the 560px bar so the CSS drop shadow has room to fade
-// out inside it; the body clips anything past the edge. Must match index.html.
-const WIN_W = 640, WIN_H = 130;
+// out inside it, and tall enough for the 120px square and circle shapes; the
+// body clips anything past the edge. One size for every shape: resizing the
+// window mid-morph makes macOS show the old content shifted for a frame. The
+// empty area is click-through instead (setInteractive below). Must match
+// index.html.
+const WIN_W = 640, WIN_H = 190;
+
+const SHAPES = [
+  { id: 'bar', label: 'Bar' },
+  { id: 'capsule', label: 'Capsule' },
+  { id: 'square', label: 'Square' },
+  { id: 'circle', label: 'Circle' },
+];
 
 // Legacy bootstrap: an existing install may still have its cookies in a file
 // next to the app. Imported once into the cookie jar, after which the jar
@@ -197,6 +208,18 @@ function menuTemplate() {
         config.set({ position: p });
       },
     },
+    {
+      label: 'Shape',
+      submenu: SHAPES.map((sh) => ({
+        label: sh.label,
+        type: 'radio',
+        checked: (config.get('shape') || 'bar') === sh.id,
+        click: () => {
+          config.set({ shape: sh.id });
+          win.webContents.send('shape', sh.id);
+        },
+      })),
+    },
     { type: 'separator' },
     {
       label: 'Sign in to Claude…',
@@ -238,6 +261,15 @@ function boundsPayload() {
 }
 
 ipcMain.handle('get-bounds', () => boundsPayload());
+
+ipcMain.handle('get-shape', () => config.get('shape') || 'bar');
+
+// Off while the pointer is away from the widget, so clicks on the window's
+// transparent margin reach whatever is underneath. The renderer decides, from
+// the same per-frame hit-test that drives hover.
+ipcMain.on('set-interactive', (_e, on) => {
+  if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!on);
+});
 
 // 'native': frames arrive on 'glass-frame' from the macOS helper.
 // 'desktop': the renderer opens a desktopCapturer stream itself.

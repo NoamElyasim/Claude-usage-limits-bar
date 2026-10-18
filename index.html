@@ -7,19 +7,23 @@
   html, body {
     /* 40px of clearance each side of the 560px bar: the body clips overflow, so
        the drop shadow has to fade to nothing before it reaches the window edge
-       or it gets sliced off square. */
-    width: 640px; height: 130px;
+       or it gets sliced off square. Tall enough for the 120px square and circle
+       plus their shadow; the empty part is click-through (see hoverTick). Must
+       match WIN_W / WIN_H in main.js. */
+    width: 640px; height: 190px;
     background: transparent; overflow: hidden;
     user-select: none;
     font-family: -apple-system, 'Segoe UI Variable', 'Segoe UI', sans-serif;
   }
   #widget {
-    position: absolute; left: 40px; top: 12px; width: 560px;
-    padding: 8px 14px;
+    /* Top-centre is the pinned point: every shape hangs from the same spot, so
+       a bar at the top of the screen morphs into a circle right under it.
+       `translate` rather than `transform`, which the hover lift owns. */
+    position: absolute; left: 50%; top: 12px; translate: -50% 0;
+    width: 560px;
     border-radius: 20px;
     -webkit-app-region: drag;
     cursor: default;
-    display: flex; flex-direction: column; gap: 6px;
     overflow: hidden;
     background: rgba(255,255,255,0.14); /* fallback fill if live capture isn't available */
     /* Only the cast shadow and a hairline edge live in CSS — the rim light and
@@ -46,7 +50,7 @@
      light wallpaper; fall back to a plain dark pill. */
   #widget.no-glass { background: rgba(26,26,30,0.60); }
   #widget::after { /* soft white edge, matching the reference bar */
-    content: ''; position: absolute; inset: 0; border-radius: 20px; padding: 1px;
+    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
     background: linear-gradient(to bottom,
       rgba(255,255,255,0.85), rgba(255,255,255,0.35) 45%, rgba(255,255,255,0.55));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -67,7 +71,7 @@
     transform: translateY(-2px);
   }
   #row { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
-  #dot {
+  .dot {
     width: 8px; height: 8px; border-radius: 50%; flex: none;
     background: #555555; transition: background 0.3s ease, box-shadow 0.3s ease;
   }
@@ -89,7 +93,7 @@
     color: #ffffff; font-size: 11px; font-weight: 700;
     transition: width 0.4s ease, background-color 0.3s ease;
   }
-  #timer {
+  .timer {
     color: rgba(255,255,255,0.75); font-size: 11px; white-space: nowrap;
     text-shadow: 0 0 8px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.5);
   }
@@ -97,15 +101,15 @@
      events over one, which is why right-clicking the bar raises Windows' own
      caption menu instead of ours. no-drag carves a hole that does get clicks —
      and :hover matches here for the same reason. */
-  #menu-btn {
+  .menu-btn {
     -webkit-app-region: no-drag;
     flex: none; width: 18px; height: 20px; border-radius: 6px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 2px; cursor: pointer; position: relative; z-index: 3;
     opacity: 0.6; transition: opacity 0.2s ease, background-color 0.2s ease;
   }
-  #menu-btn:hover { opacity: 1; background: rgba(255,255,255,0.22); }
-  #menu-btn i {
+  .menu-btn:hover { opacity: 1; background: rgba(255,255,255,0.22); }
+  .menu-btn i {
     width: 3px; height: 3px; border-radius: 50%; flex: none;
     background: rgba(255,255,255,0.95);
     box-shadow: 0 1px 2px rgba(0,0,0,0.5);
@@ -118,35 +122,189 @@
   }
   #widget:hover #detail, #widget.hovered #detail { display: flex; }
   #detail b { font-weight: 700; color: #ffffff; }
+
+  /* ─── Shapes ────────────────────────────────────────────────────────────────
+     #widget carries one shape-* class. Its size and corner radius come from
+     that class, and the glass shader reads both off the element every frame,
+     so the material follows the morph by itself. Each shape has its own face;
+     only the active one is shown. */
+  #widget.shape-capsule { width: 224px; height: 40px; border-radius: 20px; }
+  #widget.shape-square  { width: 120px; height: 120px; border-radius: 32px; }
+  #widget.shape-circle  { width: 120px; height: 120px; border-radius: 60px; }
+
+  /* Outgoing face: quick fade and slight shrink. visibility follows once the
+     fade is over, so a hidden face's menu button leaves no no-drag hole. */
+  .face {
+    position: absolute; inset: 0; z-index: 1;
+    opacity: 0; transform: scale(0.94); visibility: hidden;
+    transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 150ms;
+  }
+  /* Incoming face: starts once the container is most of the way there. */
+  #widget.shape-bar .face-bar,
+  #widget.shape-capsule .face-capsule,
+  #widget.shape-square .face-square,
+  #widget.shape-circle .face-circle {
+    opacity: 1; transform: none; visibility: visible;
+    transition: opacity 240ms ease 110ms, transform 320ms cubic-bezier(0.32, 0.72, 0, 1) 110ms,
+                visibility 0s linear 0s;
+  }
+  /* First paint and Reduced Motion: no choreography. */
+  #widget.instant, #widget.instant .face { transition: none !important; }
+
+  /* The bar face is the original layout. In flow while active, so the bar's
+     height still follows its content (the detail row unfolding on hover). */
+  .face-bar {
+    inset: 0 auto auto 0; width: 560px; padding: 8px 14px;
+    display: flex; flex-direction: column; gap: 6px; transform-origin: top left;
+  }
+  #widget.shape-bar .face-bar { position: relative; }
+
+  /* Usage strokes — rings and outlines. Same stage colours as the bar fills, on
+     the same translucent white track. pathLength=100 makes the dash a percent. */
+  .stroke { fill: none; stroke-width: 4; stroke-linecap: round; }
+  .stroke.trk { stroke: rgba(255,255,255,0.42); }
+  .stroke.val {
+    stroke-dasharray: 0 100; opacity: 0;
+    transition: stroke-dasharray 0.5s cubic-bezier(0.32, 0.72, 0, 1), stroke 0.3s ease, opacity 0.2s ease;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.25));
+  }
+
+  /* Hover on the compact shapes: the usage crossfades to the reset times. */
+  .swap { display: grid; }
+  .swap > * { grid-area: 1 / 1; transition: opacity 200ms ease; }
+  .swap > .alt { opacity: 0; }
+  #widget.hovered .swap > .main { opacity: 0; }
+  #widget.hovered .swap > .alt { opacity: 1; }
+
+  .face-capsule { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; }
+  .face-capsule .swap { flex: 1; }
+  .face-capsule .main { display: flex; align-items: center; gap: 8px; }
+  .face-capsule .alt {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    color: rgba(255,255,255,0.8); font-size: 10.5px; white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .face-capsule .alt b, .face-round .alt b { color: #fff; font-weight: 700; }
+  .gauge { position: relative; width: 28px; height: 28px; flex: none; }
+  .gauge svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .gauge .stroke { stroke-width: 3; }
+  .gauge b {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 9.5px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .mini { font-size: 10px; margin-right: -4px; }
+  .face-capsule .timer { margin-left: auto; font-size: 10.5px; }
+
+  /* Square and circle: two outlines tracing the edge (outer = 5h, inner = 7d)
+     around a centred readout. */
+  .face-round svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .face-round .center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
+  }
+  .face-round .dot { width: 7px; height: 7px; }
+  .face-round .main, .face-round .alt {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    color: rgba(255,255,255,0.85); font-size: 10.5px; white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+  }
+  .face-round .big {
+    color: #fff; font-size: 21px; font-weight: 700; line-height: 1.05;
+    text-shadow: 0 0 10px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .face-round .alt { font-size: 9.5px; gap: 3px; }
+  .face-round .foot { display: flex; align-items: center; gap: 2px; }
+  .face-round .timer { font-size: 10px; }
+  .face-round .menu-btn { width: 14px; height: 16px; }
   #detail .sep { width: 1px; height: 12px; background: rgba(255,255,255,0.35); }
 </style>
 </head>
 <body>
-<div id="widget">
+<div id="widget" class="shape-bar instant">
   <canvas id="glass-canvas"></canvas>
+  <div class="face face-bar">
   <div id="row">
-    <span id="dot"></span>
+    <span class="dot"></span>
     <span class="lbl">5h</span>
     <span class="track"><span class="fill" id="fill-5h">—</span></span>
     <span class="lbl">7d</span>
     <span class="track"><span class="fill" id="fill-7d">—</span></span>
-    <span id="timer">⏱ —</span>
-    <span id="menu-btn" title="Menu"><i></i><i></i><i></i></span>
+    <span class="timer">⏱ —</span>
+    <span class="menu-btn" title="Menu"><i></i><i></i><i></i></span>
   </div>
   <div id="detail">
-    <span>5h window resets at <b id="reset-5h">—</b></span>
+    <span>5h window resets at <b class="reset5">—</b></span>
     <span class="sep"></span>
-    <span>7d window resets <b id="reset-7d">—</b></span>
+    <span>7d window resets <b class="reset7">—</b></span>
   </div>
+  </div>
+
+  <div class="face face-capsule">
+    <span class="dot"></span>
+    <div class="swap">
+      <div class="main">
+        <span class="lbl mini">5h</span>
+        <span class="gauge"><svg viewBox="0 0 28 28"><circle class="stroke trk" cx="14" cy="14" r="11.5" pathLength="100"/><circle class="stroke val v5" cx="14" cy="14" r="11.5" pathLength="100"/></svg><b class="p5">—</b></span>
+        <span class="lbl mini">7d</span>
+        <span class="gauge"><svg viewBox="0 0 28 28"><circle class="stroke trk" cx="14" cy="14" r="11.5" pathLength="100"/><circle class="stroke val v7" cx="14" cy="14" r="11.5" pathLength="100"/></svg><b class="p7">—</b></span>
+        <span class="timer">⏱ —</span>
+      </div>
+      <div class="alt"><span>5h <b class="reset5">—</b></span><span>7d <b class="reset7">—</b></span></div>
+    </div>
+    <span class="menu-btn" title="Menu"><i></i><i></i><i></i></span>
+  </div>
+
+  <div class="face face-round face-square" data-r="32"></div>
+  <div class="face face-round face-circle" data-r="60"></div>
 </div>
+
+<!-- Readout shared by the square and the circle; cloned into both faces. -->
+<template id="round-face">
+  <svg viewBox="0 0 120 120">
+    <path class="stroke trk o1" pathLength="100"/><path class="stroke val v5 o1" pathLength="100"/>
+    <path class="stroke trk o2" pathLength="100"/><path class="stroke val v7 o2" pathLength="100"/>
+  </svg>
+  <div class="center">
+    <span class="dot"></span>
+    <div class="swap">
+      <div class="main"><b class="big p5">—</b><span>7d <b class="p7">—</b></span></div>
+      <div class="alt"><span>5h <b class="reset5">—</b></span><span>7d <b class="reset7">—</b></span></div>
+    </div>
+    <div class="foot"><span class="timer">—</span><span class="menu-btn" title="Menu"><i></i><i></i><i></i></span></div>
+  </div>
+</template>
 
 <script>
   const fill5 = document.getElementById('fill-5h');
   const fill7 = document.getElementById('fill-7d');
-  const timer = document.getElementById('timer');
-  const dot = document.getElementById('dot');
-  const reset5El = document.getElementById('reset-5h');
-  const reset7El = document.getElementById('reset-7d');
+  const widgetEl = document.getElementById('widget');
+
+  // ─── Square and circle faces ────────────────────────────────────────────────
+  // Both are the same readout inside two outlines that trace the shape's edge,
+  // so they are cloned from one template. The outlines start at top centre and
+  // run clockwise, like a clock hand; a circle is the rounded square whose
+  // corner radius is half its side.
+  const ROUND_SIZE = 120;
+  const OUTLINE_INSET = { o1: 6, o2: 13 };   // stroke centres: outer = 5h, inner = 7d
+  function roundedPath(size, inset, radius) {
+    const r = Math.max(0, radius - inset);
+    const a = inset, b = size - inset, c = size / 2;
+    return `M ${c} ${a} H ${b - r} A ${r} ${r} 0 0 1 ${b} ${a + r} V ${b - r} ` +
+           `A ${r} ${r} 0 0 1 ${b - r} ${b} H ${a + r} A ${r} ${r} 0 0 1 ${a} ${b - r} ` +
+           `V ${a + r} A ${r} ${r} 0 0 1 ${a + r} ${a} Z`;
+  }
+  const roundTpl = document.getElementById('round-face');
+  for (const face of document.querySelectorAll('.face-round')) {
+    face.appendChild(roundTpl.content.cloneNode(true));
+    const radius = Number(face.dataset.r);
+    for (const [cls, inset] of Object.entries(OUTLINE_INSET)) {
+      for (const path of face.querySelectorAll('.' + cls)) {
+        path.setAttribute('d', roundedPath(ROUND_SIZE, inset, radius));
+      }
+    }
+  }
+
+  const all = (sel) => document.querySelectorAll(sel);
 
   // Color stages: 0-50 green, 50-80 yellow, 80-90 orange, 90+ red
   function stageColor(pct) {
@@ -170,6 +328,37 @@
     el.textContent = pct + '%';
   }
 
+  // Rings and outlines: the same stage colours, as a stroke the length of the
+  // percentage. Remembered so a face appearing mid-morph can draw in from zero.
+  const usagePct = { 5: null, 7: null };
+  function paintStroke(el, pct) {
+    if (pct == null) { el.style.opacity = '0'; el.style.strokeDasharray = '0 100'; return; }
+    el.style.opacity = pct > 0 ? '1' : '0';
+    el.style.stroke = stageColor(pct);
+    el.style.strokeDasharray = `${pct} 100`;
+  }
+  function setUsage(which, pct) {
+    pct = pct == null ? null : Math.max(0, Math.min(100, pct));
+    usagePct[which] = pct;
+    setBar(which === 5 ? fill5 : fill7, pct);
+    for (const el of all('.v' + which)) paintStroke(el, pct);
+    for (const el of all('.face-capsule .p' + which)) el.textContent = pct == null ? '—' : String(pct);
+    for (const el of all('.face-round .p' + which)) el.textContent = pct == null ? '—' : pct + '%';
+  }
+  // Strokes of a face that is just coming in sweep up from empty, after the
+  // container has done most of its morph.
+  function drawIn(face) {
+    const strokes = face.querySelectorAll('.stroke.val');
+    for (const el of strokes) { el.style.transition = 'none'; el.style.strokeDasharray = '0 100'; }
+    void face.getBoundingClientRect();
+    setTimeout(() => {
+      for (const el of strokes) {
+        el.style.transition = '';
+        paintStroke(el, usagePct[el.classList.contains('v5') ? 5 : 7]);
+      }
+    }, 110);
+  }
+
   let resetsAt5 = null, resetsAt7 = null, authNeeded = false;
 
   function fmtCountdown(iso) {
@@ -181,42 +370,47 @@
     return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
   }
 
-  function fmtClock(iso) {
+  function fmtClock(iso, hour = '2-digit') {
     if (!iso) return '—';
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString([], { hour, minute: '2-digit' });
   }
 
-  function fmtDayClock(iso) {
+  function fmtDayClock(iso, hour = '2-digit') {
     if (!iso) return '—';
     const d = new Date(iso);
     return d.toLocaleDateString([], { weekday: 'short' }) + ' ' +
-           d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+           d.toLocaleTimeString([], { hour, minute: '2-digit' });
   }
 
   function tickTimer() {
     if (authNeeded) {
       // No claude.ai session: the numbers can't be fetched at all. Say so
       // instead of showing dashes that look like a network hiccup.
-      timer.textContent = '⚠ sign in';
-      reset5El.textContent = reset7El.textContent = 'menu ⋮ → Sign in';
+      for (const el of all('.timer')) el.textContent = '⚠ sign in';
+      for (const el of all('#detail .reset5, #detail .reset7')) el.textContent = 'menu ⋮ → Sign in';
+      for (const el of all('.alt .reset5, .alt .reset7')) el.textContent = '—';
       return;
     }
-    timer.textContent = '⏱ ' + fmtCountdown(resetsAt5);
-    reset5El.textContent = fmtClock(resetsAt5);
-    reset7El.textContent = fmtDayClock(resetsAt7);
+    for (const el of all('.timer')) el.textContent = '⏱ ' + fmtCountdown(resetsAt5);
+    for (const el of all('.reset5')) el.textContent = fmtClock(resetsAt5);
+    for (const el of all('.reset7')) el.textContent = fmtDayClock(resetsAt7);
+    // The square and circle have ~90px across inside their outlines: drop the
+    // leading zero there so the 7d line clears the inner ring.
+    for (const el of all('.face-round .reset5')) el.textContent = fmtClock(resetsAt5, 'numeric');
+    for (const el of all('.face-round .reset7')) el.textContent = fmtDayClock(resetsAt7, 'numeric');
   }
   setInterval(tickTimer, 30000);
 
   window.usage.onUpdate((data) => {
     authNeeded = !!data && data.state === 'auth';
     if (!data || data.state !== 'ok') {
-      setBar(fill5, null); setBar(fill7, null);
+      setUsage(5, null); setUsage(7, null);
       resetsAt5 = resetsAt7 = null;
       tickTimer();
       return;
     }
-    setBar(fill5, data.session);
-    setBar(fill7, data.weekly);
+    setUsage(5, data.session);
+    setUsage(7, data.weekly);
     resetsAt5 = data.resetsAt5 || null;
     resetsAt7 = data.resetsAt7 || null;
     tickTimer();
@@ -228,8 +422,10 @@
   function drawDot() {
     let c = DOT_COLORS[status] || DOT_COLORS.none;
     if (status === 'input') { blink = !blink; if (blink) c = '#8a7500'; }
-    dot.style.background = c;
-    dot.style.boxShadow = (status === 'none') ? 'none' : `0 0 10px 3px ${c}a6`;
+    for (const dot of all('.dot')) {
+      dot.style.background = c;
+      dot.style.boxShadow = (status === 'none') ? 'none' : `0 0 10px 3px ${c}a6`;
+    }
   }
   setInterval(drawDot, 1000);
   window.usage.onStatus((st) => { status = st || 'none'; drawDot(); });
@@ -238,10 +434,55 @@
   // Left- or right-clicking it asks the main process to pop the same menu the
   // 'context-menu' handler builds. Optional-chained so the hovertest harness,
   // whose preload stub predates this, still loads.
-  const menuBtn = document.getElementById('menu-btn');
   const openMenu = (e) => { e.preventDefault(); e.stopPropagation(); window.overlay?.showMenu?.(); };
-  menuBtn.addEventListener('click', openMenu);
-  menuBtn.addEventListener('contextmenu', openMenu);
+  for (const menuBtn of all('.menu-btn')) {
+    menuBtn.addEventListener('click', openMenu);
+    menuBtn.addEventListener('contextmenu', openMenu);
+  }
+
+  // ─── Shape and morph ────────────────────────────────────────────────────────
+  // The container animates its size and corner radius on the iOS sheet curve
+  // (fast off the mark, soft landing); the faces crossfade on CSS transitions
+  // keyed off the shape class. The glass needs nothing: it reads the element's
+  // size and radius every frame.
+  const MORPH_MS = 420;
+  const MORPH_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let shape = 'bar';
+  let morphAnim = null;
+
+  function applyShape(next, animate) {
+    if (!['bar', 'capsule', 'square', 'circle'].includes(next) || next === shape) return;
+    // Measured before the switch, so a morph interrupted mid-way starts from
+    // wherever it had got to rather than jumping.
+    const from = widgetEl.getBoundingClientRect();
+    const fromR = getComputedStyle(widgetEl).borderTopLeftRadius;
+    if (morphAnim) { morphAnim.cancel(); morphAnim = null; }
+
+    const instant = !animate || reduceMotion.matches;
+    // Reduced Motion keeps a plain crossfade of the faces, no change of size.
+    widgetEl.classList.toggle('instant', !animate);
+    widgetEl.classList.replace('shape-' + shape, 'shape-' + next);
+    shape = next;
+    const to = widgetEl.getBoundingClientRect();
+    const toR = getComputedStyle(widgetEl).borderTopLeftRadius;
+    const face = widgetEl.querySelector('.face-' + next);
+    if (animate) drawIn(face);
+    if (instant) return;
+
+    morphAnim = widgetEl.animate([
+      { width: from.width + 'px', height: from.height + 'px', borderRadius: fromR },
+      { width: to.width + 'px', height: to.height + 'px', borderRadius: toR },
+    ], { duration: MORPH_MS, easing: MORPH_EASE });
+    morphAnim.onfinish = () => { morphAnim = null; };
+  }
+
+  window.overlay?.getShape?.().then((s) => {
+    applyShape(s, false);
+    // Transitions on only after the saved shape has been painted once.
+    requestAnimationFrame(() => requestAnimationFrame(() => widgetEl.classList.remove('instant')));
+  });
+  window.overlay?.onShape?.((s) => applyShape(s, true));
 
   // ─── Pointer: polled from the OS, never from DOM events ─────────────────────
   // #widget is a -webkit-app-region: drag surface and Chromium delivers no mouse
@@ -345,6 +586,18 @@
   window.glass.onBounds((p) => { if (p) windowBounds = p.bounds; });
   window.glass.getBounds().then((p) => { if (p) windowBounds = p.bounds; }).catch(() => {});
 
+  // ─── Click-through ───────────────────────────────────────────────────────────
+  // The window is sized for the largest shape plus its shadow, and a
+  // transparent window still takes clicks on its empty pixels. So outside the
+  // widget the window ignores the mouse, and the desktop under it gets the
+  // clicks; the hover hit-test below switches it back as the pointer arrives.
+  let interactive = null;
+  function setInteractive(on) {
+    if (on === interactive) return;
+    interactive = on;
+    window.overlay?.setInteractive?.(on);
+  }
+
   // ─── Hover: hit-tested, since :hover cannot fire over the drag region ───────
   const hoverEl = document.getElementById('widget');
   const HOVER_PAD = 4;   // CSS px of slack so the pointer on the edge doesn't chatter
@@ -364,6 +617,7 @@
       pointer.y <= wb.y + r.bottom + HOVER_PAD;
     // Held open for the whole drag, whatever the hit-test says.
     hoverEl.classList.toggle('hovered', inside || !!grab);
+    setInteractive(inside || !!grab);
   }
   requestAnimationFrame(hoverTick);
 
@@ -759,9 +1013,10 @@
       // over the taller bar and the corner radius and bevel go with it.
       sizeCanvas(sf);
 
+      const radiusPx = parseFloat(getComputedStyle(widgetEl).borderTopLeftRadius) || 20;
       if (mode === 'native') {
         const rr = widgetEl.getBoundingClientRect();
-        const key = `${tileSeq}|${bounds.x},${bounds.y}|${rr.top},${rr.height}|${canvas.width}x${canvas.height}`;
+        const key = `${tileSeq}|${bounds.x},${bounds.y}|${rr.top},${rr.height}|${canvas.width}x${canvas.height}|${radiusPx}`;
         if (key === drawnKey) return;
         drawnKey = key;
       }
@@ -787,7 +1042,8 @@
       gl.uniform2f(uCropOrigin, ux, uy);
       gl.uniform2f(uCropSize, r.width / S.width, r.height / S.height);
       gl.uniform2f(uSizePx, canvas.width, canvas.height);
-      gl.uniform1f(uRadiusPx, 20 * dpr);
+      // Read live: it changes with the shape, and animates during a morph.
+      gl.uniform1f(uRadiusPx, radiusPx * dpr);
       // Retuned after the crop fix: the shader used to sample through a texel
       // inflated ~3.8x in Y (window height vs bar height), which silently
       // multiplied displacement, fringing and blur by the same amount. At a

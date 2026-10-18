@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('usage', {
 
 contextBridge.exposeInMainWorld('overlay', {
   showMenu: () => ipcRenderer.invoke('show-menu'),
+  getShape: () => ipcRenderer.invoke('get-shape'),
+  onShape: (cb) => ipcRenderer.on('shape', (_e, shape) => cb(shape)),
+  setInteractive: (on) => ipcRenderer.send('set-interactive', !!on),
 });
 
 contextBridge.exposeInMainWorld('glass', {

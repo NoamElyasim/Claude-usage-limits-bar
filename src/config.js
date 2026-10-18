@@ -15,6 +15,7 @@ const DEFAULTS = {
   // here and wins over this default.
   openAtLogin: true,
   statusDirs: null,   // override: array of dirs the Claude Code hooks write to
+  shape: 'bar',       // 'bar' | 'capsule' | 'square' | 'circle', from the ⋮ menu
 };
 
 let cache = null;

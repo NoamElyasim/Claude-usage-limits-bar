@@ -145,7 +145,14 @@ data lives, and troubleshooting.
 | --- | --- |
 | **Drag** the bar | Moves it. The position is remembered. |
 | **Hover** the bar | Lifts it and reveals the exact reset time for both windows. |
-| **Click the ⋮ button** | Opens the menu: Refresh now · Always on top · Start at login · Reset position · Sign in / Sign out · Quit. |
+| **Click the ⋮ button** | Opens the menu: Refresh now · Always on top · Start at login · Reset position · Shape · Sign in / Sign out · Quit. |
+| **⋮ → Shape** | Bar, Capsule, Square or Circle, for tight screens. The widget morphs into the new shape; the choice is remembered. |
+
+Every shape keeps the glass, the status dot, the countdown and the colour
+stages. The capsule shows each window as a small ring; the square and circle
+trace them as two outlines along their edge (outer 5h, inner 7d). Hovering a
+compact shape swaps the readout for the two reset times. Outside the widget the
+window is click-through, so its shadow margin never swallows a click.
 
 The menu sits behind a button rather than a right-click because the bar is a
 drag surface — Windows hit-tests that as the window caption and answers a
