@@ -86,19 +86,13 @@ that already exists, run that workflow manually and give it the tag.
 
 ### Per-OS notes
 
-**macOS.** The refraction effect needs Screen Recording permission. macOS asks
-on first launch; if you miss the prompt, the bar falls back to a plain dark pill
-and the ⋮ menu gains an *Allow screen recording…* item. Grant it in
-System Settings → Privacy & Security → Screen Recording; the bar picks it up
-within a few seconds. The grant is tied to the app's signature, and release
-builds are only ad-hoc signed, so each update asks again.
-
-The glass there is fed by a small ScreenCaptureKit helper
-(`native/glass-capture.swift`, built by `npm run build:native`) rather than
-`desktopCapturer`: macOS hides a content-protected window only from *other*
-processes' captures, so `desktopCapturer` saw the bar itself and the glass
-refracted its own text. Helper messages go to
-`~/Library/Logs/Claude Usage Limits Bar/glass-capture.log`.
+**macOS.** No permissions needed. The frosted background is the system's own
+window blur (Electron `vibrancy`), clipped to the widget's shape by a small
+addon (`native/backdrop-mask.mm`, built by `npm run build:native`). Nothing
+captures the screen, so there is no recording indicator in the menu bar and the
+bar appears in screenshots. Up to 1.4.0 the Mac build refracted a live
+ScreenCaptureKit capture instead, which needed Screen Recording permission;
+that entry can be removed from System Settings.
 The app has no Dock icon by design — use the ⋮ button on the bar for the menu.
 
 **Windows.** The overlay is a desktop app: install and run it **natively on
@@ -218,6 +212,6 @@ independent of the overlay — if you don't want it, delete the block after the
 | --- | --- |
 | Bar shows `⚠ sign in` | No claude.ai session — ⋮ menu → *Sign in to Claude…* |
 | Bars show `—` | Usage request failed: expired session or no network. It retries every 30s |
-| Bar is a plain dark pill | Live capture unavailable — screen-recording permission, or no WebGL |
+| Bar is a plain dark pill | Windows/Linux: live capture unavailable or no WebGL. macOS: the blur addon is missing from the build |
 | Dot stuck grey | Hooks not installed, or the status dir isn't being found (above) |
 | Bar off-screen after unplugging a monitor | It clamps to a visible display on launch; or ⋮ menu → *Reset position* |

@@ -73,9 +73,8 @@ curl -fsSL https://raw.githubusercontent.com/NoamElyasim/Claude-usage-limits-bar
 It picks the right build for your Mac (Apple Silicon or Intel), puts the app in
 Applications and starts it. Run the same line again to update.
 
-Then allow **Screen Recording** when macOS asks — the glass effect reads the
-desktop behind the bar. Without it you get a plain dark pill and everything else
-still works. After an update macOS may ask again.
+No permissions to grant: on macOS the frosted look is the system's own window
+blur, so nothing reads your screen and the bar shows up in screenshots.
 
 <details>
 <summary>Prefer the .dmg?</summary>
@@ -147,9 +146,10 @@ data lives, and troubleshooting.
 | --- | --- |
 | **Drag** the bar | Moves it. The position is remembered. |
 | **Hover** the bar | Lifts it and reveals the exact reset time for both windows. |
-| **Click the ⋮ button** | Opens the menu: Refresh now · Always on top · Start at login · Reset position · Shape · Sign in / Sign out · Quit. |
+| **Click the ⋮ button** | Opens the menu: Refresh now · Always on top · Start at login · Reset position · Shape · Settings… · Sign in / Sign out · Quit. |
 | **⋮ → Shape** | Bar, Capsule, Square or Circle, for tight screens. The widget morphs into the new shape; the choice is remembered. |
 | **⋮ → Rotate 90°** | Capsule only: stands it on end, or lays it back down. Its contents glide into place. |
+| **⋮ → Settings…** | **Appearance** (System, Dark or Light) and, on macOS, **Blur** from clear glass to heavy frost. Changes show live and are remembered. |
 
 The menu sits behind a button rather than a right-click because the bar is a
 drag surface — Windows hit-tests that as the window caption and answers a
@@ -209,13 +209,15 @@ space it covers — the empty area and the shadow never swallow a click.
 
 | File | Role |
 | --- | --- |
-| `main.js` | Window, polling loops, menu, screen-capture IPC |
+| `main.js` | Window, polling loops, menu, Settings window, screen-capture IPC |
 | `index.html` | The bar itself: layout, usage/status rendering, the glass shader |
 | `preload.js` | The only bridge between the two (context isolation is on) |
 | `src/auth.js` | claude.ai sign-in window + persistent cookie jar |
 | `src/usage.js` | Usage API, org-id discovery |
 | `src/status.js` | Finds and reads the Claude Code status files |
 | `src/config.js` | Per-machine settings in the OS user-data dir |
+| `src/settings/` | The Settings window (Appearance, Blur) |
+| `src/mac-backdrop.js`, `native/backdrop-mask.mm` | macOS blur: clipped to the widget's shape, strength from Settings |
 | `hooks/claude-status.sh` | The Claude Code hook that writes those status files |
 | `scripts/install-hooks.js` | Installs that hook and wires it into `settings.json` |
 
@@ -255,10 +257,11 @@ npm run glasslab   # shader tuning harness
 npm run shapeshots # re-render docs/shapes.png and docs/shapes-morph.gif (needs ffmpeg)
 ```
 
-The bar calls `setContentProtection(true)` so the shader does not capture
-itself, which also makes it invisible to every screenshot tool. `hovertest`
-exists because of that: the hover behaviour cannot be eyeballed on the live
-bar, so it is asserted against a scripted cursor instead.
+On Windows and Linux the bar calls `setContentProtection(true)` so the shader
+does not capture itself, which also makes it invisible to every screenshot
+tool. `hovertest` exists because of that: the hover behaviour cannot be
+eyeballed on the live bar, so it is asserted against a scripted cursor instead.
+macOS uses the system blur (vibrancy) instead of the shader, so it needs neither.
 
 ## Legacy
 

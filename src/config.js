@@ -17,6 +17,8 @@ const DEFAULTS = {
   statusDirs: null,   // override: array of dirs the Claude Code hooks write to
   shape: 'bar',       // 'bar' | 'capsule' | 'square' | 'circle', from the ⋮ menu
   capsuleOrientation: 'horizontal',   // or 'vertical' (⋮ → Rotate 90°)
+  appearance: 'system',  // 'system' | 'dark' | 'light', from ⋮ → Settings…
+  blur: null,            // macOS blur radius in points; null = system default
 };
 
 let cache = null;

@@ -7,7 +7,7 @@
 # /Applications and opens it. The build is not notarized by Apple, so a .dmg
 # downloaded in a browser is quarantined and Gatekeeper blocks it until it is
 # approved in System Settings. A file fetched with curl carries no quarantine,
-# so this route installs with nothing to approve except Screen Recording.
+# so this route installs with nothing to approve.
 set -euo pipefail
 
 REPO="NoamElyasim/Claude-usage-limits-bar"
@@ -45,8 +45,5 @@ open "/Applications/$NAME.app"
 cat <<MSG
 
 Installed /Applications/$NAME.app and started it.
-  1. Sign in to Claude in the window that opens (use the email code).
-  2. Allow Screen Recording when macOS asks — it is what the glass refracts.
-     (System Settings → Privacy & Security → Screen & System Audio Recording)
-After an update, macOS may ask for Screen Recording again.
+Sign in to Claude in the window that opens (use the email code).
 MSG

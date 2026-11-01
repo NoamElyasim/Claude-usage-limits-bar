@@ -49,6 +49,11 @@
      nothing, so the 14% white fill alone would leave the text unreadable over a
      light wallpaper; fall back to a plain dark pill. */
   #widget.no-glass { background: rgba(26,26,30,0.60); }
+  /* macOS: the system blurs the desktop behind the widget (main.js vibrancy,
+     clipped to this outline by trackBackdrop below). A light smoke on top keeps
+     the white text readable over a bright wallpaper. */
+  #widget.vibrancy { background: rgba(20,20,24,0.22); }
+  #widget.vibrancy #glass-canvas { display: none; }
   #widget::after { /* soft white edge, matching the reference bar */
     content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
     background: linear-gradient(to bottom,
@@ -243,6 +248,39 @@
   .face-round .timer { font-size: 10px; }
   .face-round .menu-btn { width: 14px; height: 16px; }
   #detail .sep { width: 1px; height: 12px; background: rgba(255,255,255,0.35); }
+
+  /* ─── Light appearance ──────────────────────────────────────────────────────
+     ⋮ → Settings… → Appearance sets nativeTheme.themeSource, which is what this
+     query follows (System = whatever macOS / Windows is set to). Dark text on
+     a pale frost, no glow behind the text; the fills keep their stage colours
+     and white numbers, and the status dot is untouched. */
+  @media (prefers-color-scheme: light) {
+    #widget {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08),
+                  0 6px 12px rgba(0,0,0,0.08),
+                  0 14px 24px rgba(0,0,0,0.10),
+                  inset 0 0 0 1px rgba(0,0,0,0.08);
+    }
+    #widget:hover, #widget.hovered {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.10),
+                  0 6px 12px rgba(0,0,0,0.10),
+                  0 14px 24px rgba(0,0,0,0.14),
+                  inset 0 0 0 1px rgba(0,0,0,0.10);
+    }
+    #widget.vibrancy { background: rgba(255,255,255,0.30); }
+    #widget.no-glass { background: rgba(246,246,248,0.80); }
+    .lbl, #detail b, .face-capsule .alt b, .face-round .alt b, .gauge b, .face-round .big {
+      color: #1d1d1f; text-shadow: none;
+    }
+    .timer, #detail, .face-capsule .alt, .face-round .main, .face-round .alt {
+      color: rgba(0,0,0,0.62); text-shadow: none;
+    }
+    .track { background: rgba(0,0,0,0.24); box-shadow: inset 0 1px 3px rgba(0,0,0,0.12); }
+    .stroke.trk { stroke: rgba(0,0,0,0.24); }
+    .menu-btn:hover { background: rgba(0,0,0,0.08); }
+    .menu-btn i { background: rgba(0,0,0,0.75); box-shadow: none; }
+    #detail .sep { background: rgba(0,0,0,0.2); }
+  }
 </style>
 </head>
 <body>
@@ -586,8 +624,8 @@
   // ─── Live window position ───────────────────────────────────────────────────
   // During a drag macOS only tells the app where its window is about ten times
   // a second, in ~55px jumps, while the pointer is reported fresh on every
-  // poll. Anything placed from the reported position — the glass crop, the
-  // hover hit-test — trailed the bar and stuttered with it (hover collapsing
+  // poll. Anything placed from the reported position — the hover
+  // hit-test — trailed the bar and stuttered with it (hover collapsing
   // and re-expanding as the pointer "left" a rect that hadn't caught up).
   // The window moves rigidly with the pointer while it is dragged, so during a
   // drag its position is taken as pointer minus the grab offset instead.
@@ -595,7 +633,6 @@
   let reportedAt = 0;        // when that position last changed
   let grab = null;           // pointer − window while a drag is in progress
   let lastGrab = null;       // kept so a drag that pauses can pick back up
-  let liveVel = { x: 0, y: 0 }, lastLive = null;   // DIP per ms, for the glass lead
   let stillPointer = null;   // where the pointer last sat still: the likely grab point
   let pointerMovedAt = 0;
 
@@ -648,15 +685,6 @@
         grab = lastGrab = { x: pointer.x - reported.x, y: pointer.y - reported.y };
       }
     }
-    const now = liveWindow();
-    if (grab && lastLive && t - lastLive.t > 0 && t - lastLive.t < 100) {
-      const k = 0.5;
-      liveVel.x = liveVel.x * (1 - k) + ((now.x - lastLive.x) / (t - lastLive.t)) * k;
-      liveVel.y = liveVel.y * (1 - k) + ((now.y - lastLive.y) / (t - lastLive.t)) * k;
-    } else if (!grab) {
-      liveVel = { x: 0, y: 0 };
-    }
-    lastLive = { x: now.x, y: now.y, t };
   }
 
   function pollPointer() {
@@ -717,11 +745,19 @@
   // backdrop-filter can't do per-pixel displacement of the actual desktop behind
   // a transparent window in Chromium, so this samples a live desktopCapturer
   // feed in a WebGL shader instead. The window excludes itself from that capture
-  // via setContentProtection(true) in main.js, avoiding a capture feedback loop.)
+  // via setContentProtection(true) in main.js, avoiding a capture feedback loop.
+  // Windows and Linux only: macOS uses the system blur, see trackBackdrop.)
   async function initGlass() {
     const canvas = document.getElementById('glass-canvas');
     const widgetEl = document.getElementById('widget');
     const noGlass = (on) => widgetEl.classList.toggle('no-glass', on);
+    // What the backdrop is:
+    //   vibrancy — macOS blurs behind the window; nothing is captured here
+    //   none     — macOS without the blur mask addon: plain dark fill
+    //   desktop  — a whole display from desktopCapturer, refracted below
+    const mode = (await window.glass.mode?.()) || 'desktop';
+    if (mode === 'vibrancy') { widgetEl.classList.add('vibrancy'); trackBackdrop(widgetEl); return; }
+    if (mode === 'none') { noGlass(true); return; }
     // WebGL2 for mipmaps on non-power-of-two textures, which the macOS path
     // blurs from (see frost below).
     const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false });
@@ -953,9 +989,6 @@
     // bleeds ghost cursors inward through the blur.
     const CURSOR_R = 22;      // CSS px; covers a 32px cursor bitmap plus margin
     const CURSOR_NUDGE = 9;   // hotspot is the tip, the bitmap hangs down-right
-    // How far ahead of the live window position the macOS glass draws while
-    // the bar is dragged — roughly the poll-to-screen latency.
-    const MOTION_LEAD_MS = 16;
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -1016,45 +1049,10 @@
       }
     }
 
-    // What the bound texture shows: the screen rect it covers (global DIP),
-    // its pixel size, and whether the OS pointer is baked into it.
-    //   desktop — a whole display from desktopCapturer, uploaded every frame
-    //   native  — a strip around the bar from the macOS helper, uploaded per
-    //             frame it sends; the pointer is left out of those
-    const mode = (await window.glass.mode?.()) || 'desktop';
-    let tile = null;   // { rect, width, height } for native frames
-    let tileSeq = 0;
-    // Native frames only arrive when the desktop changes, so redrawing on
-    // every animation frame in between would repaint identical pixels. The
-    // key covers everything the draw depends on.
-    let drawnKey = '';
-
-    if (mode === 'native') {
-      // Dark pill until the helper delivers its first frame — it sends none
-      // at all without Screen Recording permission.
-      noGlass(true);
-      window.glass.onFrame((f) => {
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, f.width, f.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.pixels);
-        gl.generateMipmap(gl.TEXTURE_2D);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        const scale = f.width / f.rect.width;
-        if (!tile || tile.scale !== scale) sizeCanvas(scale);
-        tile = { rect: f.rect, width: f.width, height: f.height, scale };
-        tileSeq++;
-        noGlass(false);
-      });
-    }
-
     let bounds = null;
     function applyPayload(p) {
       if (!p) return;
       bounds = p.bounds;
-      if (mode === 'native') {
-        if (tile && p.scaleFactor !== dpr) sizeCanvas(p.scaleFactor);
-        return;
-      }
       if (!src || src.displayId !== p.displayId) {
         attachDisplay(p.displayId);
       } else {
@@ -1075,25 +1073,8 @@
     function render() {
       requestAnimationFrame(render);
       if (!bounds) return;
-      let S, texW, texH, sf;
-      if (mode === 'native') {
-        if (!tile) return;
-        // Live position (see liveWindow), then led a little: the window
-        // server moves the window the instant the mouse moves, but this frame
-        // only reaches the screen a frame or so later, so the backdrop drawn
-        // for where the bar is now would show up trailing it. At rest the lead
-        // is zero.
-        const base = liveWindow();
-        bounds = {
-          x: base.x + liveVel.x * MOTION_LEAD_MS,
-          y: base.y + liveVel.y * MOTION_LEAD_MS,
-          width: bounds.width, height: bounds.height,
-        };
-        S = tile.rect; texW = tile.width; texH = tile.height; sf = tile.scale;
-      } else {
-        if (!src || !video || video.readyState < 2 || !video.videoWidth) return;
-        S = src.displayBounds; texW = video.videoWidth; texH = video.videoHeight; sf = src.scaleFactor;
-      }
+      if (!src || !video || video.readyState < 2 || !video.videoWidth) return;
+      const S = src.displayBounds, texW = video.videoWidth, sf = src.scaleFactor;
 
       // Crop to the bar itself, not the whole window. The canvas only covers the
       // bar, so measuring the window here stretched a 640x130 slice of desktop
@@ -1105,30 +1086,22 @@
       sizeCanvas(sf);
 
       const radiusPx = parseFloat(getComputedStyle(widgetEl).borderTopLeftRadius) || 20;
-      if (mode === 'native') {
-        const rr = widgetEl.getBoundingClientRect();
-        const key = `${tileSeq}|${bounds.x},${bounds.y}|${rr.top},${rr.height}|${canvas.width}x${canvas.height}|${radiusPx}`;
-        if (key === drawnKey) return;
-        drawnKey = key;
-      }
 
-      // The bar's rect in the texture's 0..1 space. Worked out in DIP against
-      // the rect the texture covers, so the same maths serves a whole-display
-      // capture and the helper's strip.
+      // The bar's rect in the texture's 0..1 space, worked out in DIP against
+      // the display the texture covers.
       const r = widgetEl.getBoundingClientRect();
       const ux = (bounds.x + r.left - S.x) / S.width;
       const uy = (bounds.y + r.top - S.y) / S.height;
 
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      if (mode !== 'native') gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 
       gl.useProgram(prog);
       gl.uniform1i(uVideo, 0);
-      gl.uniform1f(uSwapRB, mode === 'native' ? 1.0 : 0.0);
-      // Only the helper's frames get mipmaps: the desktop path uploads a whole
-      // display every frame, and generating a mip chain for that each frame is
-      // not worth it there. At lod 0 the shader samples exactly as before.
-      gl.uniform1f(uUseLod, mode === 'native' ? 1.0 : 0.0);
+      gl.uniform1f(uSwapRB, 0.0);
+      // No mipmaps: the desktop path uploads a whole display every frame, and
+      // generating a mip chain for that each frame is not worth it.
+      gl.uniform1f(uUseLod, 0.0);
       gl.uniform1f(uTexPerPx, (texW * (r.width / S.width)) / canvas.width);
       gl.uniform2f(uCropOrigin, ux, uy);
       gl.uniform2f(uCropSize, r.width / S.width, r.height / S.height);
@@ -1148,8 +1121,7 @@
 
       // A pointer nowhere near the bar costs nothing: no sample lands in the
       // dodge disc, so the whole thing is a no-op outside the crop.
-      // The helper's frames have no pointer in them, so nothing to dodge.
-      if (pointer && mode !== 'native') {
+      if (pointer) {
         gl.uniform2f(uCursorUv,
           (pointer.x - S.x + CURSOR_NUDGE) / S.width,
           (pointer.y - S.y + CURSOR_NUDGE) / S.height);
@@ -1163,6 +1135,25 @@
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
     requestAnimationFrame(render);
+  }
+
+  // ─── macOS backdrop outline ──────────────────────────────────────────────────
+  // The system blur covers the whole window unless it is told otherwise, so the
+  // widget's outline goes to main.js whenever it changes: a morph animates size
+  // and radius, #detail unfolds on hover, the hover lift moves it 2px.
+  function trackBackdrop(widgetEl) {
+    let sent = '';
+    function tick() {
+      requestAnimationFrame(tick);
+      const r = widgetEl.getBoundingClientRect();
+      const radius = parseFloat(getComputedStyle(widgetEl).borderTopLeftRadius) || 0;
+      const rect = { x: r.left, y: r.top, width: r.width, height: r.height, radius };
+      const key = `${r.left},${r.top},${r.width},${r.height},${radius}`;
+      if (key === sent) return;
+      sent = key;
+      window.glass.setBackdrop?.(rect);
+    }
+    tick();
   }
 
   initGlass().catch((e) => console.error('glass init failed', e));

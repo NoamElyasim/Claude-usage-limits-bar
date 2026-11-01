@@ -1,6 +1,5 @@
 const {
-  app, BrowserWindow, Menu, screen, shell, systemPreferences,
-  session, ipcMain, desktopCapturer,
+  app, BrowserWindow, Menu, screen, session, ipcMain, desktopCapturer, nativeTheme,
 } = require('electron');
 const path = require('path');
 
@@ -13,7 +12,7 @@ const config = require('./src/config');
 const auth = require('./src/auth');
 const usage = require('./src/usage');
 const status = require('./src/status');
-const macCapture = require('./src/mac-capture');
+const macBackdrop = require('./src/mac-backdrop');
 
 const POLL_MS = 30000;
 const STATUS_POLL_MS = 1000;
@@ -25,16 +24,6 @@ const STATUS_POLL_MS = 1000;
 // empty area is click-through instead (setInteractive below). Must match
 // index.html.
 const WIN_W = 640, WIN_H = 280;
-
-// Long enough for the renderer's 420ms morph to land before the captured area
-// shrinks back to the new shape alone.
-const MORPH_SETTLE_MS = 700;
-
-// Which capture area (src/mac-capture.js REGIONS) the current shape needs.
-function shapeKey() {
-  const shape = config.get('shape') || 'bar';
-  return shape === 'capsule' && config.get('capsuleOrientation') === 'vertical' ? 'capsule-vertical' : shape;
-}
 
 const SHAPES = [
   { id: 'bar', label: 'Bar' },
@@ -53,7 +42,7 @@ const LEGACY_COOKIE_FILES = [
 ];
 
 let win;
-let nativeGlass = null; // macOS capture helper, when in use
+let settingsWin = null;
 
 // ─── Window placement ────────────────────────────────────────────────────────
 function defaultPosition() {
@@ -77,6 +66,7 @@ function clampToDisplay(pos) {
 
 function createWindow() {
   const pos = clampToDisplay(config.get('position'));
+  const vibrancy = macBackdrop.available();
 
   win = new BrowserWindow({
     width: WIN_W,
@@ -89,6 +79,10 @@ function createWindow() {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false, // shadow is drawn in CSS to follow the pill shape
+    // macOS: the system blurs the desktop behind the widget, the way any
+    // translucent Mac window does. Clipped to the widget's shape by
+    // set-backdrop below. Elsewhere the renderer draws its own captured glass.
+    ...(vibrancy && { vibrancy: macBackdrop.MATERIAL, visualEffectState: 'active' }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -101,8 +95,10 @@ function createWindow() {
   // no-op elsewhere.
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   // Excludes this window from desktopCapturer's own screen capture — without
-  // this, the live-glass capture would recursively capture itself.
-  win.setContentProtection(true);
+  // this, the live-glass capture would recursively capture itself. It also
+  // hides the bar from screenshots, so only where that capture runs: macOS
+  // blurs natively and captures nothing.
+  if (process.platform !== 'darwin') win.setContentProtection(true);
 
   let saveTimer = null;
   win.on('moved', () => {
@@ -113,10 +109,9 @@ function createWindow() {
     }, 500);
   });
 
-  function sendBounds(force = false) {
+  function sendBounds() {
     if (!win || win.isDestroyed()) return;
     win.webContents.send('bounds-update', boundsPayload());
-    if (nativeGlass) nativeGlass.track(win.getBounds(), force === true);
   }
   win.on('move', sendBounds);
   // Lets the renderer pin the bar to the pointer for the length of a drag; see
@@ -148,16 +143,10 @@ function createWindow() {
   // drag region and moving the window from script instead.
 
   win.webContents.once('did-finish-load', () => {
-    if (macCapture.available()) {
-      nativeGlass = macCapture.start((frame) => {
-        if (win && !win.isDestroyed()) win.webContents.send('glass-frame', frame);
-      });
-      nativeGlass.setShape(null, shapeKey());
-    }
-    sendBounds(true);
+    sendBounds();
     // Safety net: 'move' covers dragging, but a failed capture attach or a
     // stream that ended on its own would otherwise never be retried.
-    setInterval(() => sendBounds(true), 2000);
+    setInterval(sendBounds, 2000);
     pushUsage();
     setInterval(pushUsage, POLL_MS);
     pushStatus();
@@ -226,9 +215,7 @@ function menuTemplate() {
         type: 'radio',
         checked: (config.get('shape') || 'bar') === sh.id,
         click: () => {
-          const from = shapeKey();
           config.set({ shape: sh.id });
-          if (nativeGlass) nativeGlass.setShape(from, shapeKey(), MORPH_SETTLE_MS);
           win.webContents.send('shape', sh.id);
         },
       })),
@@ -239,12 +226,11 @@ function menuTemplate() {
       visible: (config.get('shape') || 'bar') === 'capsule',
       click: () => {
         const next = config.get('capsuleOrientation') === 'vertical' ? 'horizontal' : 'vertical';
-        const from = shapeKey();
         config.set({ capsuleOrientation: next });
-        if (nativeGlass) nativeGlass.setShape(from, shapeKey(), MORPH_SETTLE_MS);
         win.webContents.send('orientation', next);
       },
     },
+    { label: 'Settings…', click: openSettings },
     { type: 'separator' },
     {
       label: 'Sign in to Claude…',
@@ -256,19 +242,78 @@ function menuTemplate() {
     },
   ];
 
-  // Screen recording is the one permission the live-glass refraction needs, and
-  // macOS only grants it from System Settings.
-  if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
-    items.push({
-      label: 'Allow screen recording…',
-      click: () => shell.openExternal(
-        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
-    });
-  }
-
   items.push({ type: 'separator' }, { label: 'Quit', click: () => app.quit() });
   return items;
 }
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+// A small window for how the widget looks: Appearance everywhere, Blur on
+// macOS. Every change applies live and is saved straight away.
+const APPEARANCES = ['system', 'dark', 'light'];
+
+function settingsState() {
+  return {
+    appearance: config.get('appearance') || 'system',
+    blur: config.get('blur') ?? macBackdrop.BLUR_DEFAULT,
+    blurDefault: macBackdrop.BLUR_DEFAULT,
+    blurMax: macBackdrop.BLUR_MAX,
+    blurAdjustable: macBackdrop.blurAdjustable(),
+  };
+}
+
+// themeSource drives prefers-color-scheme in both windows and the system
+// material behind the widget, so this one switch restyles everything.
+function applyAppearance() {
+  nativeTheme.themeSource = config.get('appearance') || 'system';
+}
+
+function applySettings(patch) {
+  const next = {};
+  if (APPEARANCES.includes(patch.appearance)) next.appearance = patch.appearance;
+  if ('blur' in patch) {
+    const b = patch.blur === null ? null : Number(patch.blur);
+    if (b === null || Number.isFinite(b)) next.blur = b === null ? null : Math.min(macBackdrop.BLUR_MAX, Math.max(0, b));
+  }
+  config.set(next);
+  if ('appearance' in next) applyAppearance();
+  if ('blur' in next) macBackdrop.setBlur(win, config.get('blur') ?? macBackdrop.BLUR_DEFAULT);
+  return settingsState();
+}
+
+function openSettings() {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    app.focus({ steal: true });
+    settingsWin.show();
+    return;
+  }
+  // Centred on whichever display the widget is on.
+  const area = screen.getDisplayMatching(win.getBounds()).workArea;
+  const W = 380, H = 210;
+  settingsWin = new BrowserWindow({
+    width: W, height: H,
+    x: Math.round(area.x + (area.width - W) / 2),
+    y: Math.round(area.y + (area.height - H) / 3),
+    title: 'Settings',
+    resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#262628' : '#ececec',
+    webPreferences: {
+      preload: path.join(__dirname, 'src', 'settings', 'preload.js'),
+      contextIsolation: true,
+    },
+  });
+  settingsWin.setMenuBarVisibility(false);
+  settingsWin.loadFile(path.join(__dirname, 'src', 'settings', 'settings.html'));
+  // No Dock icon, so the app is never active on its own; without stealing
+  // focus the window opens behind whatever app is in front.
+  settingsWin.once('ready-to-show', () => { app.focus({ steal: true }); settingsWin.show(); });
+  settingsWin.on('closed', () => { settingsWin = null; });
+}
+
+ipcMain.handle('settings-get', () => settingsState());
+ipcMain.handle('settings-set', (_e, patch) => applySettings(patch || {}));
+ipcMain.handle('settings-reset', () => applySettings({ appearance: 'system', blur: null }));
+ipcMain.on('settings-close', () => { if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close(); });
 
 // ─── Live-glass screen source (feeds the WebGL refraction shader in index.html) ─
 // Everything the renderer needs to crop the capture to the widget: which display
@@ -297,9 +342,18 @@ ipcMain.on('set-interactive', (_e, on) => {
   if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!on);
 });
 
-// 'native': frames arrive on 'glass-frame' from the macOS helper.
-// 'desktop': the renderer opens a desktopCapturer stream itself.
-ipcMain.handle('get-glass-mode', () => (macCapture.available() ? 'native' : 'desktop'));
+// 'vibrancy': macOS blurs behind the window; the renderer only reports the
+//             widget's outline (set-backdrop) so the blur can follow it.
+// 'none':     macOS without the mask addon; a plain dark fill, no capture.
+// 'desktop':  the renderer opens a desktopCapturer stream itself.
+ipcMain.handle('get-glass-mode', () => {
+  if (process.platform !== 'darwin') return 'desktop';
+  return macBackdrop.available() ? 'vibrancy' : 'none';
+});
+
+// The widget's outline in window-local DIP, sent whenever it changes: shape
+// morphs, the hover detail row unfolding, the hover lift.
+ipcMain.on('set-backdrop', (_e, rect) => macBackdrop.setMask(win, rect));
 
 // The renderer needs the pointer to keep it out of the frosted glass, and it
 // cannot get it from DOM events: the bar is a -webkit-app-region: drag surface,
@@ -351,6 +405,11 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
     session.defaultSession.setUserAgent(auth.UA);
+    applyAppearance();
+    macBackdrop.setBlur(null, config.get('blur') ?? macBackdrop.BLUR_DEFAULT);
+    // AppKit rebuilds the blur's layers when the appearance flips, which drops
+    // the shape mask and the custom strength; put both back.
+    nativeTheme.on('updated', () => setTimeout(() => macBackdrop.refresh(win), 50));
     setLoginItem(!!config.get('openAtLogin'));
 
     if (!(await auth.hasSession())) await auth.importCookieFile(LEGACY_COOKIE_FILES);
@@ -366,5 +425,4 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', () => { if (nativeGlass) nativeGlass.stop(); });
 }

@@ -6,8 +6,8 @@
 #
 # Signing identity: $MAC_SIGN_IDENTITY, else a keychain certificate named
 # "Claude Usage Bar Local Signing" if one exists, else ad-hoc. Prefer a
-# certificate — Screen Recording permission is tied to the signature, and an
-# ad-hoc one changes on every build, so each rebuild has to be granted again.
+# certificate: a stable signature keeps macOS from treating every rebuild as a
+# new app (login item, keychain access).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -23,7 +23,7 @@ fi
 SIGN_ID=${SIGN_ID:--}
 export MAC_SIGN_IDENTITY=$SIGN_ID
 
-bash scripts/build-glass-capture.sh
+bash scripts/build-backdrop-mask.sh
 npx electron-builder --mac dir "--$arch"
 # Signed by the afterPack hook (scripts/after-pack.js) with $MAC_SIGN_IDENTITY.
 

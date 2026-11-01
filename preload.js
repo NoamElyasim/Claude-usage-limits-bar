@@ -22,5 +22,5 @@ contextBridge.exposeInMainWorld('glass', {
   onDragStart: (cb) => ipcRenderer.on('drag-start', (_e, p) => cb(p)),
   onBounds: (cb) => ipcRenderer.on('bounds-update', (_e, payload) => cb(payload)),
   mode: () => ipcRenderer.invoke('get-glass-mode'),
-  onFrame: (cb) => ipcRenderer.on('glass-frame', (_e, frame) => cb(frame)),
+  setBackdrop: (rect) => ipcRenderer.send('set-backdrop', rect),
 });

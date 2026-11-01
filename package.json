@@ -17,7 +17,7 @@
     "shapeshots": "electron tools/shapeshots/main.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
-    "build:native": "bash scripts/build-glass-capture.sh",
+    "build:native": "bash scripts/build-backdrop-mask.sh",
     "dist:mac": "npm run build:native && electron-builder --mac",
     "install:mac": "bash scripts/install-mac.sh",
     "dist:linux": "electron-builder --linux"
@@ -86,8 +86,8 @@
       },
       "extraResources": [
         {
-          "from": "bin/glass-capture",
-          "to": "glass-capture"
+          "from": "bin/backdrop-mask.node",
+          "to": "backdrop-mask.node"
         }
       ]
     },
