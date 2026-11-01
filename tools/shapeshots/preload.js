@@ -1,6 +1,6 @@
 // Same API surface as the app's preload.js, fed by tools/shapeshots/main.js
-// instead of the OS: a fixed window position, a scripted pointer, and glass
-// frames cut from a still backdrop rather than a screen capture.
+// instead of the OS: a fixed window position, a scripted pointer, and the
+// widget's outline passed on to the real macOS blur mask.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('usage', {
@@ -22,6 +22,6 @@ contextBridge.exposeInMainWorld('glass', {
   onBounds: () => {},
   cursorPoint: () => ipcRenderer.invoke('get-live-position').then((p) => p.cursor),
   livePosition: () => ipcRenderer.invoke('get-live-position'),
-  mode: () => Promise.resolve('native'),
-  onFrame: (cb) => ipcRenderer.on('glass-frame', (_e, frame) => cb(frame)),
+  mode: () => Promise.resolve('vibrancy'),
+  setBackdrop: (rect) => ipcRenderer.send('set-backdrop', rect),
 });
