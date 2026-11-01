@@ -9,7 +9,7 @@ and what Claude Code is doing right now.
 
 Windows · macOS · Linux · MIT
 
-<img src="docs/shapes-morph.gif" alt="The bar lifting on hover to show both reset times, then morphing into a capsule, a vertical capsule, a square, a circle and back to a bar" width="640">
+<img src="docs/shapes-morph.gif?v=1.5.0" alt="The bar lifting on hover to show both reset times, then morphing into a capsule, a vertical capsule, a square, a circle and back to a bar" width="640">
 
 [Download](../../releases/latest) · [Install](#install) · [Shapes](#shapes) · [Looks](#looks) · [Using it](#using-it) · [How it works](#how-it-works) · [Full setup guide](INSTALL.md)
 
@@ -24,7 +24,7 @@ the same widget: the same frosted glass, the same status dot and countdown, the
 same green → yellow → orange → red stages, draggable, and with the ⋮ menu.
 
 <p align="center">
-<img src="docs/shapes.png" alt="The widget as a bar, a capsule, a vertical capsule, a square and a circle, all in frosted glass over a colourful backdrop" width="760">
+<img src="docs/shapes.png?v=1.5.0" alt="The widget as a bar, a capsule, a vertical capsule, a square and a circle, all in frosted glass over a colourful backdrop" width="760">
 </p>
 
 | Shape | Size | How it shows your usage |
@@ -62,13 +62,13 @@ make them and are remembered.
   refraction shader instead — [try it in your browser](https://noamelyasim.github.io/Claude-usage-limits-bar/).
 
 <p align="center">
-<img src="docs/looks.png" alt="The capsule in Dark and Light appearance, then over coloured stripes at three blur strengths: clear, soft and heavy" width="760">
+<img src="docs/looks.png?v=1.5.0" alt="The capsule in Dark and Light appearance, then over coloured stripes at three blur strengths: clear, soft and heavy" width="760">
 </p>
 
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/settings-dark.png">
-  <img src="docs/settings-light.png" alt="The Settings window: an Appearance switch with System, Dark and Light, a Blur slider from Clear to Heavy, and Reset to defaults" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/settings-dark.png?v=1.5.0">
+  <img src="docs/settings-light.png?v=1.5.0" alt="The Settings window: an Appearance switch with System, Dark and Light, a Blur slider from Clear to Heavy, and Reset to defaults" width="440">
 </picture>
 </p>
 
@@ -271,7 +271,8 @@ them in `%TEMP%\claude-status`.
 npm start          # run from source
 npm run hovertest  # hover hit-test regression check
 npm run glasslab   # shader tuning harness
-npm run shapeshots # re-record the README images from the real widget (macOS, needs ffmpeg)
+npm run shapeshots # re-record the README images from the real widget (macOS, needs ffmpeg);
+                   # then bump the ?v= on their README links, or GitHub keeps showing the old ones
 ```
 
 On Windows and Linux the bar calls `setContentProtection(true)` so the shader
